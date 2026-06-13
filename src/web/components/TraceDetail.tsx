@@ -1,0 +1,877 @@
+// TraceDetail - 参考 claude-tap 的展示风格重写
+// 修复: system prompt 从 messages 数组提取, token usage 展示, 消息样式
+
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronRight, Copy, Check, ChevronDown } from 'lucide-react';
+import type { TraceRecord, ChatMessage, ContentPart, ToolCallRecord, ToolCallInMessage } from '../lib/api';
+import { MarkdownRenderer } from './MarkdownRenderer';
+
+interface Props {
+  trace: TraceRecord;
+}
+
+// Section 折叠状态跨 trace 切换时保持
+const sectionStates: Record<string, boolean> = {};
+
+export function TraceDetail({ trace }: Props) {
+  const statusCode = trace.response.status || 0;
+  const isError = statusCode >= 400 || trace.status === 'error';
+  const isStreaming = trace.status === 'streaming';
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isStreaming && detailRef.current) {
+      detailRef.current.scrollTop = detailRef.current.scrollHeight;
+    }
+  }, [trace.response, isStreaming]);
+
+  const allMessages = (trace.request.body.messages || []) as ChatMessage[];
+  const systemPrompt = extractSystem(trace);
+  const messages = allMessages.filter(m => m.role !== 'system' && m.role !== 'developer');
+  const responseContent = extractResponseContent(trace);
+  // 拆分 thinking 和正文
+  const thinkingContent = Array.isArray(responseContent)
+    ? (responseContent as ContentPart[]).filter(b => b.type === 'thinking').map(b => b.thinking || '').join('\n\n')
+    : '';
+  const responseOnly: string | ContentPart[] | null = Array.isArray(responseContent)
+    ? (() => {
+        const nonThinking = (responseContent as ContentPart[]).filter(b => b.type !== 'thinking');
+        if (nonThinking.length === 0) return null;
+        if (nonThinking.length === 1 && nonThinking[0].type === 'text') return nonThinking[0].text || null;
+        return nonThinking;
+      })()
+    : responseContent;
+  const tools = (trace.request.body.tools || []) as unknown[];
+  const toolCalls = trace.toolCalls || [];
+  const usage = trace.usage;
+
+  // 获取各 Section 的复制内容
+  const getMessagesText = () => messages.map(m => {
+    const c = typeof m.content === 'string' ? m.content
+      : Array.isArray(m.content) ? (m.content as ContentPart[]).map(b => b.text || b.thinking || '').join('\n') : '';
+    return `[${m.role.toUpperCase()}]\n${c}`;
+  }).join('\n\n---\n\n');
+
+  const getResponseText = () => {
+    if (!responseOnly) return '';
+    if (typeof responseOnly === 'string') return responseOnly;
+    return (responseOnly as ContentPart[]).map(b => b.text || '').join('\n\n');
+  };
+
+  const getToolCallsText = () => toolCalls.map(tc =>
+    `${tc.name}(${JSON.stringify(tc.arguments, null, 2)})`
+  ).join('\n\n');
+
+  const getToolsText = () => JSON.stringify(tools, null, 2);
+
+  return (
+    <div ref={detailRef} className="detail-content">
+
+      {isError && (
+        <div className="error-banner">
+          <span className="eb-icon">⚠</span>
+          <span className="eb-code">{statusCode >= 400 ? `HTTP ${statusCode}` : (trace.error?.code || 'Error')}</span>
+          <span className="eb-sep">·</span>
+          <span className="eb-message">{trace.error?.message || 'Unknown error'}</span>
+        </div>
+      )}
+
+      <TokenBar usage={usage} duration={trace.duration} ttfb={trace.ttfb} isStreaming={isStreaming} />
+
+      {/* System Prompt */}
+      {systemPrompt && (
+        <Section title="System Prompt" defaultOpen={false} copyText={systemPrompt} badge="system">
+          <SystemPromptView text={systemPrompt} />
+        </Section>
+      )}
+
+      {/* Messages */}
+      {messages.length > 0 && (
+        <Section title="Messages" defaultOpen={true} badge={`${messages.length}`} copyText={getMessagesText()}>
+          <div className="messages-list">
+            {messages.map((msg, i) => (
+              <MessageBlock key={i} message={msg} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* Response */}
+      <Section
+        title="Response"
+        defaultOpen={true}
+        badge={statusCode ? `${statusCode}` : isStreaming ? 'live' : undefined}
+        copyText={getResponseText() || undefined}
+      >
+        {responseOnly ? (
+          <MessageBlock
+            message={{ role: 'assistant', content: responseOnly }}
+            isStreaming={isStreaming}
+          />
+        ) : trace.error ? (
+          <div className="msg system" style={{ marginBottom: 0 }}>
+            <span className="msg-role" style={{ background: 'var(--red)', color: '#fff' }}>ERROR</span>
+            <div className="content-block">
+              [{trace.error.code}] {trace.error.message}
+            </div>
+          </div>
+        ) : (
+          <div style={{ color: 'var(--text-tertiary)', fontSize: '13px', padding: '4px 0' }}>
+            {isStreaming
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--text-tertiary)', fontSize: '12px' }}>
+                  接收中 <span className="streaming-dots"><span/><span/><span/></span>
+                </span>
+              : 'No response content'}
+          </div>
+        )}
+      </Section>
+
+      {/* Thinking */}
+      {thinkingContent && (
+        <Section title="Thinking" defaultOpen={false} copyText={thinkingContent} badge="thinking">
+          <ThinkingSection content={thinkingContent} />
+        </Section>
+      )}
+
+      {/* Tool Calls */}
+      {toolCalls.length > 0 && (
+        <Section title="Tool Calls" defaultOpen={true} badge={`${toolCalls.length}`} copyText={getToolCallsText()}>
+          <div style={{ display: 'grid', gap: '4px' }}>
+            {toolCalls.map((tc, i) => <ToolCallBlock key={i} toolCall={tc} />)}
+          </div>
+        </Section>
+      )}
+
+      {/* Tools Definition */}
+      {tools.length > 0 && (
+        <Section title="Tools Definition" defaultOpen={false} badge={`${tools.length}`} copyText={getToolsText()}>
+          <ToolsDefinition tools={tools as ToolDef[]} />
+        </Section>
+      )}
+
+
+      {/* Raw JSON */}
+      <Section title="Raw JSON" defaultOpen={false} copyText={JSON.stringify(trace, null, 2)}>
+        <JsonTree data={trace} />
+      </Section>
+
+    </div>
+  );
+}
+
+// ─── Token 用量栏 ───
+
+interface UsageData {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  reasoningTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  cachedTokens?: number;
+}
+
+function fmtMs(ms: number) {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
+}
+
+function TokenBar({ usage, duration, ttfb, isStreaming }: {
+  usage?: UsageData; duration: number; ttfb: number; isStreaming: boolean;
+}) {
+  const hasCache = (usage?.cachedTokens || 0) + (usage?.cacheReadTokens || 0) + (usage?.cacheWriteTokens || 0) > 0;
+
+  return (
+    <div className="token-usage-bar">
+      <div className="token-bar">
+        {isStreaming ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+            接收中 <span className="streaming-dots"><span/><span/><span/></span>
+          </span>
+        ) : usage ? (
+          <>
+            <span className="tok-group">
+              <span className="tok-item">
+                <span className="tok-label">合计</span>
+                <span className="tok-val" style={{ color: 'var(--text)', fontSize: '12px' }}>{usage.totalTokens.toLocaleString()}</span>
+              </span>
+            </span>
+            <span className="tok-group">
+              <span className="tok-item">
+                <span className="tok-arrow" style={{ color: 'var(--blue)' }}>↑</span>
+                <span className="tok-val">{usage.promptTokens.toLocaleString()}</span>
+              </span>
+              <span className="tok-item">
+                <span className="tok-arrow" style={{ color: 'var(--green)' }}>↓</span>
+                <span className="tok-val">{usage.completionTokens.toLocaleString()}</span>
+              </span>
+              {(usage.reasoningTokens || 0) > 0 && (
+                <span className="tok-item">
+                  <span className="tok-dot" style={{ background: 'var(--indigo)' }} />
+                  <span className="tok-label">推理</span>
+                  <span className="tok-val">{usage.reasoningTokens!.toLocaleString()}</span>
+                </span>
+              )}
+            </span>
+            {hasCache && (
+              <span className="tok-group">
+                {(usage.cachedTokens || 0) > 0 && (
+                  <span className="tok-item">
+                    <span className="tok-dot" style={{ background: 'var(--cyan)' }} />
+                    <span className="tok-label">缓存命中</span>
+                    <span className="tok-val">{usage.cachedTokens!.toLocaleString()}</span>
+                  </span>
+                )}
+                {(usage.cacheReadTokens || 0) > 0 && (
+                  <span className="tok-item">
+                    <span className="tok-dot" style={{ background: 'var(--cyan)' }} />
+                    <span className="tok-label">缓存读</span>
+                    <span className="tok-val">{usage.cacheReadTokens!.toLocaleString()}</span>
+                  </span>
+                )}
+                {(usage.cacheWriteTokens || 0) > 0 && (
+                  <span className="tok-item">
+                    <span className="tok-dot" style={{ background: 'var(--amber)' }} />
+                    <span className="tok-label">缓存写</span>
+                    <span className="tok-val">{usage.cacheWriteTokens!.toLocaleString()}</span>
+                  </span>
+                )}
+              </span>
+            )}
+            <span className="tok-group">
+              {ttfb > 0 && (
+                <span className="tok-item">
+                  <span className="tok-label">首字</span>
+                  <span className="tok-val">{fmtMs(ttfb)}</span>
+                </span>
+              )}
+              {duration > 0 && (
+                <span className="tok-item">
+                  <span className="tok-label">耗时</span>
+                  <span className="tok-val">{fmtMs(duration)}</span>
+                </span>
+              )}
+              {duration > 0 && (usage.completionTokens || 0) > 0 && (
+                <span className="tok-item">
+                  <span className="tok-label">速度</span>
+                  <span className="tok-val">{Math.round(usage.completionTokens / (duration / 1000))} tok/s</span>
+                </span>
+              )}
+            </span>
+          </>
+        ) : (
+          <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>无 token 数据</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section (可折叠) ───
+
+function Section({
+  title, defaultOpen, badge, copyText, children,
+}: {
+  title: string;
+  defaultOpen: boolean;
+  badge?: string;
+  copyText?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(sectionStates[title] ?? defaultOpen);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    sectionStates[title] = next;
+  };
+
+  return (
+    <div className="section">
+      <div className="section-header" onClick={toggle}>
+        <span className={`chevron${open ? ' open' : ''}`}>&#9654;</span>
+        <span className="title">{title}</span>
+        {badge && <span className="badge">{badge}</span>}
+        {/* 复制按钮紧跟标题，所有 Section 统一显示 */}
+        {copyText !== undefined && copyText !== '' && (
+          <CopyButton getText={() => copyText} className="copy-btn" stopPropagation />
+        )}
+      </div>
+      {open && <div className="section-body open">{children}</div>}
+    </div>
+  );
+}
+
+// ─── Message Block ───
+
+function MessageBlock({
+  message, isStreaming,
+}: {
+  message: ChatMessage | { role: string; content: string | ContentPart[] };
+  isStreaming?: boolean;
+}) {
+  const role = message.role;
+  const content = message.content;
+  const isAssistant = role === 'assistant';
+  const isPlainText = typeof content === 'string';
+  // toggle 状态提到 MessageBlock 层，传给子组件
+  const [mode, setMode] = useState<'raw' | 'markdown'>(isAssistant ? 'markdown' : 'raw');
+
+  const getTextContent = (): string => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return (content as ContentPart[]).map(b => b.text || b.thinking || '').filter(Boolean).join('\n\n');
+    }
+    return '';
+  };
+
+  const roleClass =
+    role === 'user' ? 'user'
+    : role === 'assistant' ? 'assistant'
+    : role === 'system' || role === 'developer' ? 'system'
+    : role === 'tool' ? 'tool_result'
+    : '';
+
+  const toolCalls = (message as ChatMessage).tool_calls;
+  const toolCallId = (message as ChatMessage).tool_call_id;
+  const hasContent = isPlainText ? content.trim().length > 0 : Array.isArray(content) && content.length > 0;
+  const showToggle = isPlainText && content.trim().length > 0;
+  const [collapsed, setCollapsed] = useState(role === 'tool');
+
+  return (
+    <div className={`msg ${roleClass}`}>
+      <div className="msg-header-row">
+        <span
+          className="msg-role msg-role-toggle"
+          onClick={() => setCollapsed(c => !c)}
+          title={collapsed ? '展开' : '收起'}
+        >
+          <span className={`msg-collapse-arrow${collapsed ? '' : ' open'}`}>▶</span>
+          {role.toUpperCase()}
+        </span>
+        {showToggle && (
+          <div className="text-toggle-bar" style={{ marginLeft: '8px', marginTop: 0, display: collapsed ? 'none' : undefined }}>
+            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
+            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
+          </div>
+        )}
+        <span style={{ marginLeft: 'auto' }}><CopyButton getText={getTextContent} /></span>
+      </div>
+      {!collapsed && (
+        <>
+          {isPlainText ? (
+            <TextWithToggle text={content as string} mode={mode} />
+          ) : Array.isArray(content) ? (
+            <div>
+              {(content as ContentPart[]).map((block, i) => (
+                <ContentBlock key={i} block={block} isStreaming={isStreaming && i === (content as ContentPart[]).length - 1} />
+              ))}
+            </div>
+          ) : content ? (
+            <JsonTree data={content} />
+          ) : null}
+          {toolCalls && toolCalls.length > 0 && (
+            <div className="msg-tool-calls">
+              {toolCalls.map((tc) => (
+                <MsgToolCallBlock key={tc.id} toolCall={tc} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {collapsed && (hasContent || (toolCalls && toolCalls.length > 0)) && (
+        <div className="msg-collapsed-hint">
+          {[
+            hasContent ? (isPlainText ? `${(content as string).slice(0, 60).replace(/\n/g, ' ')}…` : `${(content as ContentPart[]).length} 块`) : '',
+            toolCalls?.length ? `${toolCalls.length} tool_call` : '',
+          ].filter(Boolean).join(' · ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Message Tool Call Block（messages 里 assistant 的 tool_calls）───
+
+function MsgToolCallBlock({ toolCall }: { toolCall: ToolCallInMessage }) {
+  const [open, setOpen] = useState(false);
+  let args: unknown = toolCall.function.arguments;
+  try { args = JSON.parse(toolCall.function.arguments); } catch { /* keep raw */ }
+  const argCount = typeof args === 'object' && args !== null ? Object.keys(args).length : 0;
+  return (
+    <div className="tool-block">
+      <div className="tool-block-header" onClick={() => setOpen(o => !o)}>
+        <span className={`tb-arrow${open ? ' open' : ''}`}>&#9654;</span>
+        <span className="tb-name">{toolCall.function.name}</span>
+        {!open && argCount > 0 && <span className="tb-desc">({argCount} args)</span>}
+      </div>
+      {open && (
+        <div className="tool-block-body open">
+          {typeof args === 'object' ? <JsonTree data={args} /> : <pre className="text-raw">{String(args)}</pre>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Content Block ───
+
+function ContentBlock({ block, isStreaming }: { block: ContentPart; isStreaming?: boolean }) {
+  const [mode, setMode] = useState<'raw' | 'markdown'>('markdown');
+  if (block.type === 'text' || block.type === 'input_text' || block.type === 'output_text') {
+    const text = block.text || '';
+    return (
+      <div className="content-block">
+        <div className="msg-header-row" style={{ marginBottom: '4px' }}>
+          <div className="text-toggle-bar" style={{ marginTop: 0 }}>
+            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
+            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
+          </div>
+        </div>
+        <TextPane text={text} mode={mode} isStreaming={isStreaming} />
+      </div>
+    );
+  }
+  if (block.type === 'thinking') return <ThinkingBlock content={block.thinking || ''} />;
+  if (block.type === 'tool_use') {
+    return (
+      <div className="content-block block-framed">
+        <span className="tool-use-label">⚙ {block.name || 'tool_use'}</span>
+        <JsonTree data={block.input} />
+      </div>
+    );
+  }
+  if (block.type === 'tool_result') {
+    return (
+      <div className="content-block block-framed" style={{ borderColor: 'var(--purple)', background: 'var(--purple-bg)' }}>
+        <span className="tool-use-label" style={{ color: 'var(--purple)', background: 'color-mix(in srgb, var(--purple) 15%, transparent)' }}>
+          ↩ tool_result: {block.tool_use_id || ''}
+        </span>
+        <div className="content-block-text">
+          {typeof block.text === 'string' ? block.text : <JsonTree data={block.text} />}
+        </div>
+      </div>
+    );
+  }
+  return <JsonTree data={block} />;
+}
+
+// ─── 统一文本容器：raw/markdown 都在同一框内，切换不改容器高度 ───
+// 两种模式同时渲染，用 display:none 隐藏非激活一侧，容器高度由两者中较高者撑开
+
+function TextPane({
+  text,
+  mode,
+  isStreaming,
+  sans,
+  compact,
+  className,
+}: {
+  text: string;
+  mode: 'raw' | 'markdown';
+  isStreaming?: boolean;
+  sans?: boolean;
+  compact?: boolean;  // compact=true 时渲染模式用 pre-wrap 纯文本，不走 react-markdown
+  className?: string;
+}) {
+  if (!text) return null;
+  return (
+    <div className={`text-pane${className ? ' ' + className : ''}`}>
+      <pre
+        className={`text-raw${sans ? ' sans' : ''}`}
+        style={{ display: mode === 'raw' ? undefined : 'none' }}
+      >{text}</pre>
+      <div style={{ display: mode === 'markdown' ? undefined : 'none' }}>
+        {compact ? (
+          // Thinking 等紧凑文本：保留换行但不走 Markdown 解析，避免 <p> margin 累积
+          <div className="text-raw sans" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+        ) : (
+          <MarkdownRenderer text={text} isStreaming={isStreaming} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── System Prompt 独立视图（toggle 在文本框上方）───
+
+function SystemPromptView({ text }: { text: string }) {
+  const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
+  return (
+    <div>
+      <div className="text-toggle-bar" style={{ marginBottom: '6px' }}>
+        <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
+        <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
+      </div>
+      <TextPane text={text} mode={mode} sans />
+    </div>
+  );
+}
+
+// ─── TextWithToggle：按钮由外部（msg-header-row）控制 ───
+
+function TextWithToggle({ text, mode }: { text: string; mode: 'raw' | 'markdown' }) {
+  if (!text) return null;
+  return <TextPane text={text} mode={mode} />;
+}
+
+
+// ─── Thinking Block（内联折叠，仍用于 messages 里的 ContentBlock）───
+
+function ThinkingBlock({ content }: { content: string }) {
+  const [open, setOpen] = useState(false);
+  const lines = content.split('\n').length;
+  const preview = content.slice(0, 80).replace(/\n/g, ' ');
+  return (
+    <div className="thinking-block content-block">
+      <div className="thinking-block-header" onClick={() => setOpen(o => !o)}>
+        <span className="thinking-label">
+          <span>{open ? '▼' : '▶'}</span>
+          <span>Thinking</span>
+          <span style={{ fontWeight: 400, opacity: 0.7 }}>({lines} 行)</span>
+        </span>
+        {!open && <span className="thinking-preview">{preview}…</span>}
+      </div>
+      {open && (
+        <div className="text-raw sans" style={{ whiteSpace: 'pre-wrap', marginTop: '6px' }}>{content}</div>
+      )}
+    </div>
+  );
+}
+
+// ─── Thinking Section（独立栏，pre-wrap 纯文本展示）───
+
+function ThinkingSection({ content }: { content: string }) {
+  const lines = content.split('\n').length;
+  return (
+    <div className="thinking-section">
+      <div className="thinking-section-meta">
+        <span className="thinking-section-lines">{lines} 行</span>
+      </div>
+      <div className="text-pane thinking-section-body">
+        <div className="text-raw sans" style={{ whiteSpace: 'pre-wrap' }}>{content}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tool Call Block ───
+
+function ToolCallBlock({ toolCall }: { toolCall: ToolCallRecord }) {
+  const [open, setOpen] = useState(false);
+  const argCount = typeof toolCall.arguments === 'object' ? Object.keys(toolCall.arguments || {}).length : 0;
+  return (
+    <div className="tool-block">
+      <div className="tool-block-header" onClick={() => setOpen(o => !o)}>
+        <span className={`tb-arrow${open ? ' open' : ''}`}>&#9654;</span>
+        <span className="tb-name">{toolCall.name}</span>
+        {!open && argCount > 0 && <span className="tb-desc">({argCount} args)</span>}
+      </div>
+      {open && (
+        <div className="tool-block-body open">
+          <JsonTree data={toolCall.arguments} />
+          {toolCall.result !== undefined && (
+            <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-light)' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--orange)', marginBottom: '6px', textTransform: 'uppercase' }}>Result</div>
+              <JsonTree data={toolCall.result} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tools Definition ───
+
+interface ToolDef {
+  type?: string;
+  function?: {
+    name?: string;
+    description?: string;
+    parameters?: unknown;
+  };
+  name?: string;
+  description?: string;
+  parameters?: unknown;
+  input_schema?: unknown;
+  [key: string]: unknown;
+}
+
+function ToolsDefinition({ tools }: { tools: ToolDef[] }) {
+  return (
+    <div style={{ display: 'grid', gap: '4px' }}>
+      {tools.map((tool, i) => <ToolDefBlock key={i} tool={tool} />)}
+    </div>
+  );
+}
+
+function ToolDefBlock({ tool }: { tool: ToolDef }) {
+  const [open, setOpen] = useState(false);
+
+  // OpenAI 格式：{ type: 'function', function: { name, description, parameters } }
+  // Anthropic 格式：{ name, description, input_schema }
+  const fnDef = tool.function || tool;
+  const name = fnDef.name || tool.name || 'unknown';
+  const description = (fnDef as ToolDef).description || tool.description || '';
+  const schema = (fnDef as ToolDef).parameters || tool.input_schema || tool.parameters;
+  const required: string[] = (schema as { required?: string[] })?.required || [];
+  const props: Record<string, { type?: string; description?: string }> =
+    (schema as { properties?: Record<string, { type?: string; description?: string }> })?.properties || {};
+
+  return (
+    <div className="tool-block">
+      <div className="tool-block-header" onClick={() => setOpen(o => !o)}>
+        <span className={`tb-arrow${open ? ' open' : ''}`}>&#9654;</span>
+        <span className="tb-name">{name}</span>
+        <span className="tb-desc">{description}</span>
+      </div>
+      {open && (
+        <div className="tool-block-body open">
+          {description && <div className="tb-full-desc">{description}</div>}
+          {Object.keys(props).length > 0 ? (
+            <>
+              <div className="tb-params-title">Parameters</div>
+              {Object.entries(props).map(([pname, param]) => (
+                <div key={pname} className="tb-param">
+                  <div className="tb-param-row1">
+                    <span className="tb-pname">{pname}</span>
+                    {param.type && <span className="tb-ptype">{param.type}</span>}
+                    {required.includes(pname) && <span className="tb-prequired">required</span>}
+                  </div>
+                  {param.description && <div className="tb-pdesc">{param.description}</div>}
+                </div>
+              ))}
+            </>
+          ) : schema ? (
+            <JsonTree data={schema} />
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Stream Events（解析可读内容） ───
+
+function StreamEventList({ events }: { events: Array<{ index: number; timestamp: number; data: string }> }) {
+  // 每个 chunk 显示为一行摘要（不再拆行）
+  const rows = events.map(chunk => {
+    const lines = chunk.data.split('\n').filter(l => l.startsWith('data: '));
+    const deltas: string[] = [];
+    let type = 'raw';
+    for (const line of lines) {
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]') { type = 'done'; deltas.push('[DONE]'); continue; }
+      try {
+        const p = JSON.parse(raw);
+        const delta = p.choices?.[0]?.delta;
+        if (delta?.content) { type = 'text'; deltas.push(delta.content); }
+        else if (delta?.reasoning_content) { type = 'think'; deltas.push(delta.reasoning_content); }
+        else if (delta?.tool_calls) { type = 'tool'; deltas.push(`tool:${delta.tool_calls[0]?.function?.name || '...'}`); }
+        else if (p.usage) { type = 'usage'; deltas.push(`tokens=${p.usage.total_tokens}`); }
+        else if (p.choices?.[0]?.finish_reason) { type = 'finish'; deltas.push(`finish=${p.choices[0].finish_reason}`); }
+      } catch { deltas.push(raw.slice(0, 60)); }
+    }
+    return { idx: chunk.index, type, summary: deltas.join('') || chunk.data.slice(0, 80) };
+  });
+
+  const typeColor: Record<string, string> = {
+    text: 'var(--green)', think: 'var(--indigo)', tool: 'var(--cyan)',
+    usage: 'var(--amber)', finish: 'var(--text-tertiary)', done: 'var(--text-tertiary)', raw: 'var(--text-tertiary)',
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '2px' }}>
+      {rows.slice(0, 300).map((row, i) => (
+        <div key={i} className="stream-event-row">
+          <span className="stream-event-idx">#{row.idx}</span>
+          <span style={{ fontSize: '10px', fontWeight: 600, color: typeColor[row.type], minWidth: '44px', flexShrink: 0, fontFamily: 'var(--mono)' }}>{row.type}</span>
+          <span className="stream-event-data" style={{ color: row.type === 'text' ? 'var(--text)' : 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{row.summary}</span>
+        </div>
+      ))}
+      {rows.length > 300 && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>… 还有 {rows.length - 300} 条</div>}
+    </div>
+  );
+}
+
+// ─── Copy Button ───
+
+function CopyButton({
+  getText, className = 'copy-btn', stopPropagation = false,
+}: {
+  getText: () => string;
+  className?: string;
+  stopPropagation?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async (e: React.MouseEvent) => {
+    if (stopPropagation) e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(getText());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+  return (
+    <button className={`${className}${copied ? ' copied' : ''}`} onClick={handleCopy} data-tip="复制">
+      {copied ? <Check size={10} /> : <Copy size={10} />}
+    </button>
+  );
+}
+
+// ─── JSON Tree ───
+
+let _jtId = 0;
+
+function JsonTree({ data }: { data: unknown }) {
+  _jtId = 0;
+  return <div className="json-view">{renderNode(data, 0)}</div>;
+}
+
+// Raw JSON 里默认收起的 key（chunks/headers/tools 内容多但不常查看）
+const JSON_DEFAULT_COLLAPSED = new Set(['chunks', 'headers', 'tools']);
+
+function renderNode(obj: unknown, depth: number, parentKey?: string): React.ReactNode {
+  if (depth > 50) return <span className="json-punct">…</span>;
+  if (obj === null) return <span className="jnull">null</span>;
+  if (obj === undefined) return <span className="jnull">undefined</span>;
+  if (typeof obj === 'boolean') return <span className="jb">{String(obj)}</span>;
+  if (typeof obj === 'number') return <span className="jn">{obj}</span>;
+  if (typeof obj === 'string') {
+    const display = obj.length > 300 ? obj.slice(0, 300) + '…' : obj;
+    return <span className="js">"{display}"</span>;
+  }
+  if (typeof obj !== 'object') return <span>{String(obj)}</span>;
+
+  const isArray = Array.isArray(obj);
+  const entries = isArray
+    ? (obj as unknown[]).map((v, i) => [i, v] as [number, unknown])
+    : Object.entries(obj as Record<string, unknown>);
+  const len = entries.length;
+
+  if (len === 0) return <span className="json-punct">{isArray ? '[]' : '{}'}</span>;
+
+  if (len <= 3 && depth < 2 && entries.every(([, v]) => typeof v !== 'object' || v === null)) {
+    const items = entries.map(([k, v], i) => (
+      <span key={String(k)}>
+        {!isArray && <><span className="jk">"{String(k)}"</span><span className="json-punct">: </span></>}
+        {renderNode(v, depth + 1)}
+        {i < len - 1 && <span className="json-punct">, </span>}
+      </span>
+    ));
+    return (
+      <>
+        <span className="json-punct">{isArray ? '[' : '{'}</span>
+        {items}
+        <span className="json-punct">{isArray ? ']' : '}'}</span>
+      </>
+    );
+  }
+
+  const id = 'jt' + (_jtId++);
+  const summary = `${len} ${isArray ? 'item' : 'key'}${len !== 1 ? 's' : ''}`;
+  const collapsed = parentKey !== undefined && JSON_DEFAULT_COLLAPSED.has(parentKey);
+  const children = entries.map(([k, v]) => (
+    <div key={String(k)} className="jt-line">
+      {!isArray && <><span className="jk">"{String(k)}"</span><span className="json-punct">: </span></>}
+      {renderNode(v, depth + 1, String(k))}
+    </div>
+  ));
+
+  return (
+    <>
+      <span className={`jt-toggle${collapsed ? '' : ' jt-open'}`} onClick={(e) => toggleJT(e, id)} style={{ cursor: 'pointer' }}>{collapsed ? '▶' : '▼'}</span>
+      <span className="json-punct">{isArray ? '[' : '{'}</span>
+      <span className={`jt-summary${collapsed ? ' jt-show' : ''}`} id={`${id}s`}>… {summary}</span>
+      <div className={`jt-children${collapsed ? '' : ' jt-open'}`} id={id}>{children}</div>
+      <div className={`jt-close${collapsed ? ' jt-hidden' : ''}`} id={`${id}c`}><span className="json-punct">{isArray ? ']' : '}'}</span></div>
+    </>
+  );
+}
+
+function toggleJT(e: React.MouseEvent, id: string) {
+  e.stopPropagation();
+  const node = document.getElementById(id);
+  const summary = document.getElementById(id + 's');
+  const closeLine = document.getElementById(id + 'c');
+  const toggle = e.currentTarget as HTMLElement;
+  if (!node) return;
+  const isOpen = node.classList.contains('jt-open');
+  if (isOpen) {
+    node.classList.remove('jt-open');
+    toggle.classList.remove('jt-open');
+    toggle.textContent = '▶';
+    summary?.classList.add('jt-show');
+    closeLine?.classList.add('jt-hidden');
+  } else {
+    node.classList.add('jt-open');
+    toggle.classList.add('jt-open');
+    toggle.textContent = '▼';
+    summary?.classList.remove('jt-show');
+    closeLine?.classList.remove('jt-hidden');
+  }
+}
+
+// ─── Helpers ───
+
+function extractSystem(trace: TraceRecord): string | null {
+  const body = trace.request.body;
+  const parts: string[] = [];
+
+  if (typeof body.system === 'string' && body.system.trim()) {
+    parts.push(body.system);
+  } else if (Array.isArray(body.system)) {
+    const text = (body.system as Array<string | { type?: string; text?: string }>)
+      .map(b => typeof b === 'string' ? b : b?.type === 'text' ? (b.text || '') : '')
+      .filter(Boolean).join('\n\n');
+    if (text.trim()) parts.push(text);
+  }
+
+  const msgs = (trace.request.body.messages || []) as ChatMessage[];
+  for (const m of msgs) {
+    if (m.role === 'system' || m.role === 'developer') {
+      const text = typeof m.content === 'string'
+        ? m.content
+        : Array.isArray(m.content)
+        ? (m.content as ContentPart[]).map(b => b.text || '').filter(Boolean).join('\n\n')
+        : '';
+      if (text.trim()) parts.push(text);
+    }
+  }
+
+  return parts.length ? parts.join('\n\n') : null;
+}
+
+function extractResponseContent(trace: TraceRecord): string | ContentPart[] | null {
+  const body = trace.response.body as Record<string, unknown> | null;
+  if (!body) return null;
+
+  if (body.choices && Array.isArray(body.choices) && body.choices.length > 0) {
+    const choice = body.choices[0] as Record<string, unknown>;
+    const message = choice.message as Record<string, unknown> | undefined;
+    if (message) {
+      const content = message.content;
+      const reasoningContent = message.reasoning_content as string | undefined;
+      const parts: ContentPart[] = [];
+      if (reasoningContent) parts.push({ type: 'thinking', thinking: reasoningContent });
+      if (typeof content === 'string' && content.trim()) {
+        parts.push({ type: 'text', text: content });
+      } else if (Array.isArray(content)) {
+        parts.push(...(content as ContentPart[]));
+      } else if (content !== null && content !== undefined) {
+        parts.push({ type: 'text', text: JSON.stringify(content) });
+      }
+      if (parts.length === 1 && parts[0].type === 'text') return parts[0].text || null;
+      if (parts.length > 0) return parts;
+    }
+    return null;
+  }
+
+  if (body.content && Array.isArray(body.content)) {
+    const blocks = body.content as ContentPart[];
+    if (blocks.length === 1 && blocks[0].type === 'text') return blocks[0].text || null;
+    return blocks;
+  }
+
+  if (typeof body.text === 'string') return body.text;
+  return null;
+}

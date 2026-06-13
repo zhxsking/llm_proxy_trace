@@ -1,0 +1,11 @@
+proxy:
+  port: 19900
+  logLevel: info
+providers: {}
+trace:
+  dir: ./traces
+  maxFileSize: 52428800
+  maxAge: 604800
+  maxInMemory: 1000
+dashboard:
+  autoOpen: true

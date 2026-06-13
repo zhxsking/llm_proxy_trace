@@ -1,0 +1,10 @@
+node_modules/
+dist/
+traces-test/
+traces/
+*.log
+.DS_Store
+ref/
+tmp/
+.env
+docs/

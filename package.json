@@ -1,0 +1,58 @@
+{
+  "name": "lpt",
+  "version": "0.1.0",
+  "description": "LLM Proxy Trace - 本地大模型代理工具，记录完整Trace日志，Web实时监控",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lpt": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "dev:web": "vite --config src/web/vite.config.ts",
+    "build": "tsc && vite build src/web",
+    "build:web": "vite build src/web",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "llm",
+    "proxy",
+    "trace",
+    "openai",
+    "anthropic",
+    "ollama"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@floating-ui/react": "^0.27.19",
+    "@hono/node-server": "^2.0.4",
+    "dompurify": "^3.4.10",
+    "highlight.js": "^11.11.1",
+    "hono": "^4.7.0",
+    "js-yaml": "^4.1.0",
+    "lucide-react": "^1.17.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/js-yaml": "^4.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vite": "^8.0.16"
+  }
+}
