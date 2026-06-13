@@ -14,9 +14,8 @@
 ## 功能特性
 
 - **零侵入代理** — 只需把 `base_url` 改为 `http://localhost:19900`，无需修改任何应用代码
-- **实时流式追踪** — WebSocket 推送，逐 chunk 展示流式响应过程，打字机效果
+- **实时流式追踪** — WebSocket 推送，实时响应
 - **完整 Trace 记录** — 请求体、响应体、思考链（thinking）、Tool Call、Token 用量全记录
-- **多提供商支持** — OpenAI / Anthropic / Ollama / 任意兼容 API，统一代理
 - **Markdown 渲染** — 响应内容支持原文 / Markdown 双视图，代码块语法高亮
 - **Token 用量统计** — 输入/输出/推理/缓存命中 Token 分项展示，实时速度统计
 
