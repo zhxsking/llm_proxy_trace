@@ -518,6 +518,7 @@ function TextWithToggle({ text, mode }: { text: string; mode: 'raw' | 'markdown'
 
 function ThinkingBlock({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
   const lines = content.split('\n').length;
   const preview = content.slice(0, 80).replace(/\n/g, ' ');
   return (
@@ -531,24 +532,33 @@ function ThinkingBlock({ content }: { content: string }) {
         {!open && <span className="thinking-preview">{preview}…</span>}
       </div>
       {open && (
-        <div className="text-raw sans" style={{ whiteSpace: 'pre-wrap', marginTop: '6px' }}>{content}</div>
+        <div style={{ marginTop: '6px' }}>
+          <div className="text-toggle-bar" style={{ marginBottom: '4px' }}>
+            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={e => { e.stopPropagation(); setMode('raw'); }}>原文</button>
+            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={e => { e.stopPropagation(); setMode('markdown'); }}>渲染</button>
+          </div>
+          <TextPane text={content} mode={mode} sans />
+        </div>
       )}
     </div>
   );
 }
 
-// ─── Thinking Section（独立栏，pre-wrap 纯文本展示）───
+// ─── Thinking Section（独立栏，支持 raw/markdown 切换）───
 
 function ThinkingSection({ content }: { content: string }) {
   const lines = content.split('\n').length;
+  const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
   return (
     <div className="thinking-section">
       <div className="thinking-section-meta">
         <span className="thinking-section-lines">{lines} 行</span>
+        <div className="text-toggle-bar" style={{ marginTop: 0, marginLeft: '8px' }}>
+          <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
+          <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
+        </div>
       </div>
-      <div className="text-pane thinking-section-body">
-        <div className="text-raw sans" style={{ whiteSpace: 'pre-wrap' }}>{content}</div>
-      </div>
+      <TextPane text={content} mode={mode} sans />
     </div>
   );
 }
