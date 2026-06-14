@@ -187,9 +187,7 @@ export function TraceSidebar({ traces, activeId, onSelect, loading, onDeleteFile
                         className="file-group-delete"
                         onClick={e => {
                           e.stopPropagation();
-                          if (window.confirm(`删除记录文件 ${group.fileName}？此操作不可恢复。`)) {
-                            onDeleteFile(group.fileName!);
-                          }
+                          onDeleteFile(group.fileName!);
                         }}
                       >
                         <Trash2 size={11} />

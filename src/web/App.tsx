@@ -11,8 +11,16 @@ import { TraceSidebar } from './components/TraceSidebar';
 import { TraceDetail } from './components/TraceDetail';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Tooltip } from './components/Tooltip';
+import { ConfirmDialog } from './components/ConfirmDialog';
 
 type StatusFilter = 'all' | 'error';
+
+interface ConfirmState {
+  open: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+}
 
 // ─── Theme helpers (F02) ───
 
@@ -36,6 +44,12 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showSettings, setShowSettings] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
+  const closeConfirm = () => setConfirmState(s => ({ ...s, open: false }));
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -262,10 +276,12 @@ export default function App() {
                 <button
                   className="clear-dropdown-item danger"
                   onClick={() => {
-                    if (window.confirm('将永久删除所有 Trace 文件，无法恢复，确认吗？')) {
-                      api.deleteTraces(true).then(() => { setTraces([]); fetchData(); });
-                    }
                     setClearMenuOpen(false);
+                    showConfirm(
+                      '永久删除所有文件',
+                      '将永久删除所有 Trace 文件，无法恢复，确认吗？',
+                      () => { api.deleteTraces(true).then(() => { setTraces([]); fetchData(); }); }
+                    );
                   }}
                 >
                   <Trash2 size={12} />
@@ -373,13 +389,18 @@ export default function App() {
               setActiveId(id);
             }}
             loading={loading}
-            onDeleteFile={async (fileName) => {
-              await api.deleteTraceFile(fileName).catch(() => {});
-              // 从本地 state 删掉该文件的记录，不用重新 fetch
-              setTraces(prev => prev.filter(t => t.sourceFile !== fileName));
-              if (activeId && traces.find(t => t.id === activeId)?.sourceFile === fileName) {
-                setActiveId(null);
-              }
+            onDeleteFile={(fileName) => {
+              showConfirm(
+                '删除记录文件',
+                `删除 ${fileName}？此操作不可恢复。`,
+                async () => {
+                  await api.deleteTraceFile(fileName).catch(() => {});
+                  setTraces(prev => prev.filter(t => t.sourceFile !== fileName));
+                  if (activeId && traces.find(t => t.id === activeId)?.sourceFile === fileName) {
+                    setActiveId(null);
+                  }
+                }
+              );
             }}
           />
         </div>
@@ -400,6 +421,17 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* ─── ConfirmDialog ─── */}
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText="确认删除"
+        danger
+        onConfirm={() => { closeConfirm(); confirmState.onConfirm(); }}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 }
