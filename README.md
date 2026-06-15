@@ -31,8 +31,6 @@
 npx llmpt
 ```
 
-首次运行会在系统配置目录自动生成 `.env`，并打印出文件路径。编辑该文件填入 API Key 后，Ctrl+C 重启即可生效。
-
 ### 方式二：全局安装
 
 ```bash
@@ -46,29 +44,9 @@ llmpt
 
 ## 配置
 
-服务启动时会打印配置文件路径，例如：
+首次运行会在系统配置目录自动生成 `.env`，并打印出文件路径。编辑该文件填入 `BASE_URL` 和 `API Key` 后，重启服务即可生效。
 
-```
-📝 配置文件：C:\Users\xxx\AppData\Roaming\llmpt\.env
-   修改后重启服务生效
-```
-
-编辑该 `.env` 文件，取消注释并填入真实值：
-
-```env
-# OpenAI / 兼容接口
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_API_KEY=sk-...
-
-# Anthropic
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Ollama 本地（无需 apiKey）
-OLLAMA_BASE_URL=http://localhost:11434
-```
-
-如果当前目录存在 `.env`，会优先使用当前目录的配置（适合开发环境）。修改后重启服务生效。
+如果当前目录存在 `.env`，会优先使用当前目录的配置，修改后重启服务生效。
 
 ---
 
