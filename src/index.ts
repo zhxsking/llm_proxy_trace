@@ -62,57 +62,19 @@ function resolveEnvPath(cwd: string): string {
 function resolveConfigPath(cwd: string): string {
   const cwdCfg = path.join(cwd, 'lpt.config.yaml');
   if (fs.existsSync(cwdCfg)) return cwdCfg;
-
   const appDataDir = getAppDataDir();
   return path.join(appDataDir, 'lpt.config.yaml');
-}
-
-/**
- * llmpt claude [...args]
- * 用临时 settings 文件覆盖 ANTHROPIC_BASE_URL，让 Claude Code 流量过 LPT 代理。
- * Claude Code 的 settings.json 里的 env 字段会覆盖进程环境变量，
- * 因此必须通过 --settings 注入，而不是仅靠环境变量。
- */
-function runClaude(args: string[], port: number): void {
-  // Claude Code 的 settings.json env 字段会覆盖进程环境变量，
-  // 必须通过 --settings 注入才能覆盖。直接传内联 JSON 字符串即可（无需临时文件）。
-  const hasSettings = args.some(a => a === '--settings' || a.startsWith('--settings='));
-  const settingsJson = JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://localhost:${port}` } });
-  const claudeArgs = hasSettings ? args : ['--settings', settingsJson, ...args];
-
-  const child = spawn('claude', claudeArgs, {
-    stdio: 'inherit',
-    windowsVerbatimArguments: false,
-  });
-
-  child.on('error', (err) => {
-    console.error('❌ 启动 claude 失败：', err.message);
-    console.error('   请确保已安装 Claude Code：https://claude.ai/code');
-    process.exit(1);
-  });
-
-  child.on('exit', (code) => {
-    process.exit(code ?? 0);
-  });
 }
 
 async function main() {
   const args = process.argv.slice(2);
 
   // ── 子命令：llmpt claude [...claude args] ──
-  if (args[0] === 'claude') {
-    const claudeArgs = args.slice(1);
-    const cwd = process.cwd();
-    const envPath = resolveEnvPath(cwd);
-    const configPath = resolveConfigPath(cwd);
-    const config = loadConfig(configPath, envPath);
-    const port = config.proxy.port;
-    console.log(`🔍 LPT 代理：http://localhost:${port}  →  claude ${claudeArgs.join(' ') || '(interactive)'}`);
-    runClaude(claudeArgs, port);
-    return;
-  }
+  // 先启动 LPT 服务，等端口就绪后再启动 claude
+  const isClaudeSubcommand = args[0] === 'claude';
+  const claudeArgs = isClaudeSubcommand ? args.slice(1) : [];
 
-  // ── 默认：启动 LPT 服务 ──
+  // ── 启动 LPT 服务 ──
   console.log('🚀 LPT 启动中...');
 
   const cwd = process.cwd();
@@ -144,6 +106,28 @@ async function main() {
   console.log(`✅ 服务已启动：http://localhost:${config.proxy.port}`);
   console.log(`📝 配置文件：${envPath}`);
   console.log(`   修改后重启服务生效`);
+
+  // ── 子命令模式：启动 claude，claude 退出后关闭 LPT ──
+  if (isClaudeSubcommand) {
+    console.log(`🔍 LPT 代理：http://localhost:${config.proxy.port}  →  claude ${claudeArgs.join(' ') || '(interactive)'}`);
+    const child = spawn('claude', (() => {
+      const hasSettings = claudeArgs.some(a => a === '--settings' || a.startsWith('--settings='));
+      const settingsJson = JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://localhost:${config.proxy.port}` } });
+      return hasSettings ? claudeArgs : ['--settings', settingsJson, ...claudeArgs];
+    })(), { stdio: 'inherit', windowsVerbatimArguments: false });
+
+    child.on('error', (err) => {
+      console.error('❌ 启动 claude 失败：', err.message);
+      console.error('   请确保已安装 Claude Code：https://claude.ai/code');
+      registry.stopRefreshTimers(); ws.stop(); server.close();
+      process.exit(1);
+    });
+    child.on('exit', (code) => {
+      registry.stopRefreshTimers(); ws.stop(); server.close();
+      process.exit(code ?? 0);
+    });
+    return; // 不走 autoOpen / shutdown 注册，等待 child
+  }
 
   // Auto-open dashboard
   if (config.dashboard.autoOpen) {
