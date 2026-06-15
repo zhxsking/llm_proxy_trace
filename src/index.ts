@@ -119,6 +119,13 @@ async function main() {
     port: config.proxy.port,
   });
 
+  // ── Claude 模式：静默所有后续 console.log，避免污染 claude TUI ──
+  // 必须在 attachToServer 之前（ws 挂载日志会通过 console.log 输出）
+  if (isClaudeSubcommand) {
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    console.log = () => {};
+  }
+
   // Attach WebSocket to the same HTTP server
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ws.attachToServer(server as any, '/ws');
@@ -129,9 +136,10 @@ async function main() {
 
   // ── 子命令模式：启动 claude，claude 退出后关闭 LPT ──
   if (isClaudeSubcommand) {
-    console.log(`🔍 LPT 代理：http://localhost:${config.proxy.port}  →  claude ${claudeArgs.join(' ') || '(interactive)'}`);
+    // 打印状态行（console.log 已被静默，直接写 stdout）
+    process.stdout.write(`✅ LPT 代理已就绪：http://localhost:${config.proxy.port}\n`);
+    process.stdout.write(`🔍 启动 claude ${claudeArgs.join(' ') || '(interactive)'}\n\n`);
 
-    // Claude Code 的 --settings 只接受文件路径，不支持内联 JSON
     // 写临时文件注入 ANTHROPIC_BASE_URL（claude 退出后删除）
     const hasSettings = claudeArgs.some(a => a === '--settings' || a.startsWith('--settings='));
     let settingsFile: string | null = null;
