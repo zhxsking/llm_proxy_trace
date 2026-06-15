@@ -103,6 +103,9 @@ export function TraceDetail({ trace }: Props) {
         badge={statusCode ? `${statusCode}` : isStreaming ? 'live' : undefined}
         copyText={getResponseText() || undefined}
       >
+        {thinkingContent && (
+          <ThinkingSection content={thinkingContent} />
+        )}
         {responseOnly ? (
           <MessageBlock
             message={{ role: 'assistant', content: responseOnly }}
@@ -125,13 +128,6 @@ export function TraceDetail({ trace }: Props) {
           </div>
         )}
       </Section>
-
-      {/* Thinking */}
-      {thinkingContent && (
-        <Section title="Thinking" defaultOpen={false} copyText={thinkingContent} badge="thinking">
-          <ThinkingSection content={thinkingContent} />
-        </Section>
-      )}
 
       {/* Tool Calls */}
       {toolCalls.length > 0 && (
@@ -519,46 +515,53 @@ function TextWithToggle({ text, mode }: { text: string; mode: 'raw' | 'markdown'
 function ThinkingBlock({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
-  const lines = content.split('\n').length;
   const preview = content.slice(0, 80).replace(/\n/g, ' ');
   return (
     <div className="thinking-block content-block">
       <div className="thinking-block-header" onClick={() => setOpen(o => !o)}>
         <span className="thinking-label">
-          <span>{open ? '▼' : '▶'}</span>
+          <span className="thinking-arrow">{open ? '▼' : '▶'}</span>
           <span>Thinking</span>
-          <span style={{ fontWeight: 400, opacity: 0.7 }}>({lines} 行)</span>
         </span>
-        {!open && <span className="thinking-preview">{preview}…</span>}
-      </div>
-      {open && (
-        <div style={{ marginTop: '6px' }}>
-          <div className="text-toggle-bar" style={{ marginBottom: '4px' }}>
-            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={e => { e.stopPropagation(); setMode('raw'); }}>原文</button>
-            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={e => { e.stopPropagation(); setMode('markdown'); }}>渲染</button>
+        {open ? (
+          <div className="text-toggle-bar" style={{ marginTop: 0, marginLeft: '4px' }} onClick={e => e.stopPropagation()}>
+            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
+            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
           </div>
-          <TextPane text={content} mode={mode} sans />
-        </div>
-      )}
+        ) : (
+          <span className="thinking-preview">{preview}…</span>
+        )}
+        <CopyButton getText={() => content} stopPropagation className="copy-btn" />
+      </div>
+      {open && <TextPane text={content} mode={mode} sans />}
     </div>
   );
 }
 
-// ─── Thinking Section（独立栏，支持 raw/markdown 切换）───
+// ─── Thinking Section（内联折叠块，默认收起，放在 Response 区域顶部）───
 
 function ThinkingSection({ content }: { content: string }) {
-  const lines = content.split('\n').length;
+  const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
+  const preview = content.slice(0, 80).replace(/\n/g, ' ');
   return (
-    <div className="thinking-section">
-      <div className="thinking-section-meta">
-        <span className="thinking-section-lines">{lines} 行</span>
-        <div className="text-toggle-bar" style={{ marginTop: 0, marginLeft: '8px' }}>
-          <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
-          <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
-        </div>
+    <div className="thinking-block content-block" style={{ marginBottom: '8px' }}>
+      <div className="thinking-block-header" onClick={() => setOpen(o => !o)}>
+        <span className="thinking-label">
+          <span className="thinking-arrow">{open ? '▼' : '▶'}</span>
+          <span>Thinking</span>
+        </span>
+        {open ? (
+          <div className="text-toggle-bar" style={{ marginTop: 0, marginLeft: '4px' }} onClick={e => e.stopPropagation()}>
+            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
+            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
+          </div>
+        ) : (
+          <span className="thinking-preview">{preview}…</span>
+        )}
+        <CopyButton getText={() => content} stopPropagation className="copy-btn" />
       </div>
-      <TextPane text={content} mode={mode} sans />
+      {open && <TextPane text={content} mode={mode} sans />}
     </div>
   );
 }

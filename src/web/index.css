@@ -520,6 +520,12 @@ body {
   color: var(--cyan);
 }
 .thinking-block-header:hover { filter: brightness(0.97); }
+.thinking-arrow { margin-right: 4px; }
+.thinking-block-header .copy-btn { margin-left: auto; }
+/* thinking-block 内 md-prose 重置 white-space，否则继承 .content-block 的 pre-wrap 导致空行堆积 */
+.thinking-block .md-prose,
+.thinking-block .md-prose p,
+.thinking-block .md-prose li { white-space: normal; }
 
 /* ─── Thinking Section（独立 Section 内展示）─── */
 .thinking-section {
@@ -620,7 +626,8 @@ body {
 .copy-btn.copied { color: var(--green); border-color: var(--green); }
 
 .msg-block:hover .copy-btn,
-.section-header:hover .copy-btn { opacity: 1; }
+.section-header:hover .copy-btn,
+.thinking-block-header:hover .copy-btn { opacity: 1; }
 
 /* ─── Detail content wrapper ─── */
 .detail-content {
