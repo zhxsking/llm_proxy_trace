@@ -67,14 +67,16 @@ const DEFAULT_CONFIG: AppConfig = {
 };
 
 /**
- * Load config from YAML file, falling back to defaults
+ * Load config from YAML file, falling back to defaults.
+ * @param configPath  Path to lpt.config.yaml (optional, defaults to cwd)
+ * @param envPath     Path to .env file to load (optional, defaults to cwd/.env)
  */
-export function loadConfig(configPath?: string): AppConfig {
+export function loadConfig(configPath?: string, envPath?: string): AppConfig {
   const resolvedPath = configPath || path.resolve(process.cwd(), 'lpt.config.yaml');
 
-  // 从项目根目录加载 .env（仅设置尚未存在的环境变量）
-  const envPath = path.resolve(process.cwd(), '.env');
-  loadDotEnv(envPath);
+  // 加载 .env（仅设置尚未存在的环境变量）
+  const resolvedEnvPath = envPath || path.resolve(process.cwd(), '.env');
+  loadDotEnv(resolvedEnvPath);
 
   if (!fs.existsSync(resolvedPath)) {
     const config = { ...DEFAULT_CONFIG, providers: {} };

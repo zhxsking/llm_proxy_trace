@@ -7,37 +7,73 @@ import { createApp } from './server/app.js';
 import { loadConfig } from './server/config/loader.js';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * 若当前目录没有 .env，从包内 .env.example 复制一份
+ * 返回 AppData 目录：
+ *   Windows : %APPDATA%\llmpt
+ *   macOS   : ~/Library/Application Support/llmpt
+ *   Linux   : ~/.config/llmpt
  */
-function ensureEnv(cwd: string): void {
-  const envPath = path.resolve(cwd, '.env');
-  if (fs.existsSync(envPath)) return;
+function getAppDataDir(): string {
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'llmpt');
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'llmpt');
+  }
+  return path.join(os.homedir(), '.config', 'llmpt');
+}
 
+/**
+ * 解析 .env 路径：优先 cwd，其次 appdata
+ * 若两处都不存在，则在 appdata 目录生成一份
+ * 返回实际使用的路径
+ */
+function resolveEnvPath(cwd: string): string {
+  const cwdEnv = path.join(cwd, '.env');
+  if (fs.existsSync(cwdEnv)) return cwdEnv;
+
+  const appDataDir = getAppDataDir();
+  const appDataEnv = path.join(appDataDir, '.env');
+  if (fs.existsSync(appDataEnv)) return appDataEnv;
+
+  // 生成到 appdata
+  fs.mkdirSync(appDataDir, { recursive: true });
   const examplePath = path.resolve(__dirname, '..', '.env.example');
   if (fs.existsSync(examplePath)) {
-    fs.copyFileSync(examplePath, envPath);
-    console.log(`📄 已生成配置文件：${envPath}`);
-    console.log('   请编辑 .env 填入 API Key，修改后 Ctrl+C 重启生效\n');
+    fs.copyFileSync(examplePath, appDataEnv);
+    console.log(`📄 已生成配置文件：${appDataEnv}`);
+    console.log('   请编辑该文件填入 API Key，修改后重启服务生效\n');
   } else {
-    console.log('⚠️  未找到 .env，将使用默认配置启动');
-    console.log('   可手动创建 .env 填入 OPENAI_API_KEY 等变量\n');
+    console.log(`⚠️  未找到 .env.example，将使用默认配置启动`);
+    console.log(`   可手动创建 ${appDataEnv} 填入 OPENAI_API_KEY 等变量\n`);
   }
+  return appDataEnv;
+}
+
+/**
+ * 解析 lpt.config.yaml 路径：优先 cwd，其次 appdata
+ */
+function resolveConfigPath(cwd: string): string {
+  const cwdCfg = path.join(cwd, 'lpt.config.yaml');
+  if (fs.existsSync(cwdCfg)) return cwdCfg;
+
+  const appDataDir = getAppDataDir();
+  return path.join(appDataDir, 'lpt.config.yaml');
 }
 
 async function main() {
-  console.log('🚀 LPT (LLM Proxy Trace) 启动中...');
+  console.log('🚀 LPT 启动中...');
 
-  // Load configuration — pass explicit path so saveConfig writes back to the same file
-  const configPath = path.resolve(process.cwd(), 'lpt.config.yaml');
-  ensureEnv(process.cwd());
-  const config = loadConfig(configPath);
-  console.log(`📋 配置加载成功：端口 ${config.proxy.port}`);
+  const cwd = process.cwd();
+  const envPath = resolveEnvPath(cwd);
+  const configPath = resolveConfigPath(cwd);
 
+  const config = loadConfig(configPath, envPath);
 
   // Create application
   const { app, registry, collector, ws } = createApp(config, configPath);
@@ -53,22 +89,7 @@ async function main() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ws.attachToServer(server as any, '/ws');
 
-  console.log(`\n🌐 服务运行中：http://localhost:${config.proxy.port}`);
-  console.log(`🔌 WebSocket：ws://localhost:${config.proxy.port}/ws`);
-  console.log(`📁 Trace 目录：${config.trace.dir}`);
-  console.log('\n  代理路由：');
-  console.log('    POST /v1/chat/completions  (OpenAI)');
-  console.log('    POST /v1/completions       (OpenAI)');
-  console.log('    GET  /v1/models');
-  console.log('    POST /v1/messages          (Anthropic)');
-  console.log('    POST /api/chat             (Ollama)');
-  console.log('  管理 API：');
-  console.log('    GET  /api/traces');
-  console.log('    GET  /api/traces/:id');
-  console.log('    GET  /api/providers');
-  console.log('    PUT  /api/providers/:type');
-  console.log('    GET  /api/stats');
-  console.log('\n  ⌨️  Ctrl+C 停止\n');
+  console.log(`✅ 服务已启动：http://localhost:${config.proxy.port}`);
 
   // Auto-open dashboard
   if (config.dashboard.autoOpen) {
@@ -86,11 +107,10 @@ async function main() {
 
   // Graceful shutdown
   const shutdown = () => {
-    console.log('\n🛑 正在关闭服务...');
+    console.log('\n🛑 正在关闭...');
     registry.stopRefreshTimers();
     ws.stop();
     server.close();
-    console.log('👋 已退出');
     process.exit(0);
   };
 
