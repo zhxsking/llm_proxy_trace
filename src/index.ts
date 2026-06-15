@@ -130,23 +130,32 @@ async function main() {
   // ── 子命令模式：启动 claude，claude 退出后关闭 LPT ──
   if (isClaudeSubcommand) {
     console.log(`🔍 LPT 代理：http://localhost:${config.proxy.port}  →  claude ${claudeArgs.join(' ') || '(interactive)'}`);
-    const child = spawn('claude', (() => {
-      const hasSettings = claudeArgs.some(a => a === '--settings' || a.startsWith('--settings='));
-      const settingsJson = JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://localhost:${config.proxy.port}` } });
-      return hasSettings ? claudeArgs : ['--settings', settingsJson, ...claudeArgs];
-    })(), { stdio: 'inherit', windowsVerbatimArguments: false });
+
+    // Claude Code 的 --settings 只接受文件路径，不支持内联 JSON
+    // 写临时文件注入 ANTHROPIC_BASE_URL（claude 退出后删除）
+    const hasSettings = claudeArgs.some(a => a === '--settings' || a.startsWith('--settings='));
+    let settingsFile: string | null = null;
+    let finalArgs = claudeArgs;
+    if (!hasSettings) {
+      settingsFile = path.join(os.tmpdir(), `lpt-claude-${process.pid}.json`);
+      fs.writeFileSync(settingsFile, JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://localhost:${config.proxy.port}` } }));
+      finalArgs = ['--settings', settingsFile, ...claudeArgs];
+    }
+
+    const child = spawn('claude', finalArgs, { stdio: 'inherit', windowsVerbatimArguments: false });
+
+    const cleanup = () => {
+      if (settingsFile) { try { fs.unlinkSync(settingsFile); } catch { /* ignore */ } }
+      registry.stopRefreshTimers(); ws.stop(); server.close();
+    };
 
     child.on('error', (err) => {
       console.error('❌ 启动 claude 失败：', err.message);
       console.error('   请确保已安装 Claude Code：https://claude.ai/code');
-      registry.stopRefreshTimers(); ws.stop(); server.close();
-      process.exit(1);
+      cleanup(); process.exit(1);
     });
-    child.on('exit', (code) => {
-      registry.stopRefreshTimers(); ws.stop(); server.close();
-      process.exit(code ?? 0);
-    });
-    return; // 不走 autoOpen / shutdown 注册，等待 child
+    child.on('exit', (code) => { cleanup(); process.exit(code ?? 0); });
+    return;
   }
 
   // Auto-open dashboard
