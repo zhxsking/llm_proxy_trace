@@ -10,7 +10,7 @@ import os
 import anthropic
 
 BASE_URL = os.getenv("LPT_BASE_URL", "http://localhost:19900")
-MODEL    = os.getenv("LPT_MODEL",    "claude-3-7-sonnet-20250219")
+MODEL    = os.getenv("LPT_MODEL",    "claude-sonnet-4-6")
 STREAM   = os.getenv("IS_STREAM", "true").lower() != "false"
 
 client = anthropic.Anthropic(
