@@ -16,12 +16,12 @@ export async function proxySSEStream(
   collector: TraceCollector,
   ws: WSServer,
   requestStartTime: number,
+  providerType?: string,
 ): Promise<Response> {
   if (!upstreamResponse.body) {
     throw new Error('Upstream response has no body');
   }
 
-  // startTime 来自 handler，包含完整的请求发出时间，确保 TTFB 统计准确
   const startTime = requestStartTime;
   let ttfb = 0;
   let firstChunk = true;
@@ -32,11 +32,11 @@ export async function proxySSEStream(
   const toolCallsMap: Map<number, { id: string; name: string; arguments: string }> = new Map();
   let usage: TokenUsage | undefined;
 
+  const isAnthropic = providerType === 'anthropic';
+
   const reader = upstreamResponse.body.getReader();
   const decoder = new TextDecoder();
 
-  // 用 start() 而不是 pull()，用一个 async 循环完整驱动读取，
-  // 彻底避免 pull() 竞态导致的 ERR_INVALID_STATE
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -46,7 +46,6 @@ export async function proxySSEStream(
           try {
             ({ done, value } = await reader.read());
           } catch (readErr) {
-            // 上游连接被关闭（客户端断开 / 超时）
             const msg = readErr instanceof Error ? readErr.message : String(readErr);
             if (!msg.includes('aborted') && !msg.includes('closed') && !msg.includes('disconnected')) {
               console.error('[Stream] Reader error:', readErr);
@@ -77,25 +76,34 @@ export async function proxySSEStream(
             if (data === '[DONE]') continue;
             try {
               const parsed = JSON.parse(data);
-              const delta = parsed.choices?.[0]?.delta;
-              if (delta) {
-                if (typeof delta.content === 'string') fullContent += delta.content;
-                if (typeof delta.reasoning_content === 'string') reasoningContent += delta.reasoning_content;
-                if (Array.isArray(delta.tool_calls)) {
-                  for (const tc of delta.tool_calls) {
-                    const idx = tc.index ?? 0;
-                    if (tc.id && tc.function?.name) {
-                      toolCallsMap.set(idx, { id: tc.id, name: tc.function.name, arguments: tc.function.arguments || '' });
-                    } else if (tc.function?.arguments) {
-                      const existing = toolCallsMap.get(idx);
-                      if (existing) existing.arguments += tc.function.arguments;
+              if (isAnthropic) {
+                parseAnthropicChunk(parsed, { fullContent, reasoningContent, toolCallsMap, usage },
+                  (updates) => {
+                    fullContent = updates.fullContent;
+                    reasoningContent = updates.reasoningContent;
+                    if (updates.usage) usage = updates.usage;
+                  });
+              } else {
+                // OpenAI-compatible format
+                const delta = parsed.choices?.[0]?.delta;
+                if (delta) {
+                  if (typeof delta.content === 'string') fullContent += delta.content;
+                  if (typeof delta.reasoning_content === 'string') reasoningContent += delta.reasoning_content;
+                  if (Array.isArray(delta.tool_calls)) {
+                    for (const tc of delta.tool_calls) {
+                      const idx = tc.index ?? 0;
+                      if (tc.id && tc.function?.name) {
+                        toolCallsMap.set(idx, { id: tc.id, name: tc.function.name, arguments: tc.function.arguments || '' });
+                      } else if (tc.function?.arguments) {
+                        const existing = toolCallsMap.get(idx);
+                        if (existing) existing.arguments += tc.function.arguments;
+                      }
                     }
                   }
                 }
-              }
-              // 提取 usage（含扩展字段）
-              if (parsed.usage && typeof parsed.usage === 'object') {
-                usage = extractUsage(parsed.usage);
+                if (parsed.usage && typeof parsed.usage === 'object') {
+                  usage = extractUsageOpenAI(parsed.usage);
+                }
               }
             } catch { /* Not JSON, skip */ }
           }
@@ -113,12 +121,10 @@ export async function proxySSEStream(
           try {
             controller.enqueue(value);
           } catch {
-            // Client disconnected — stop reading
             break;
           }
         }
       } finally {
-        // 无论正常结束还是异常退出，都完成 trace 并关闭 controller
         const totalDuration = Date.now() - startTime;
         const toolCalls = Array.from(toolCallsMap.values());
         const completeBody = buildCompleteBody(fullContent, reasoningContent, trace.model, toolCalls, usage);
@@ -158,37 +164,113 @@ export async function proxySSEStream(
   });
 }
 
-/** 从 usage 对象提取全部字段（含各家扩展） */
-function extractUsage(u: Record<string, unknown>): TokenUsage {
+// ─── Anthropic SSE parser ───────────────────────────────────────────────────
+
+interface Accumulator {
+  fullContent: string;
+  reasoningContent: string;
+  toolCallsMap: Map<number, { id: string; name: string; arguments: string }>;
+  usage: TokenUsage | undefined;
+}
+
+function parseAnthropicChunk(
+  parsed: Record<string, unknown>,
+  acc: Accumulator,
+  update: (updates: { fullContent: string; reasoningContent: string; usage?: TokenUsage }) => void,
+): void {
+  const type = parsed.type as string | undefined;
+
+  // message_start: contains initial usage (input tokens)
+  if (type === 'message_start') {
+    const msg = parsed.message as Record<string, unknown> | undefined;
+    if (msg?.usage) {
+      acc.usage = mergeAnthropicUsage(acc.usage, msg.usage as Record<string, unknown>);
+      update({ fullContent: acc.fullContent, reasoningContent: acc.reasoningContent, usage: acc.usage });
+    }
+    return;
+  }
+
+  // content_block_delta: text or thinking content
+  if (type === 'content_block_delta') {
+    const delta = parsed.delta as Record<string, unknown> | undefined;
+    if (!delta) return;
+    if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+      acc.fullContent += delta.text;
+      update({ fullContent: acc.fullContent, reasoningContent: acc.reasoningContent });
+    } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+      acc.reasoningContent += delta.thinking;
+      update({ fullContent: acc.fullContent, reasoningContent: acc.reasoningContent });
+    } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+      // tool use argument streaming
+      const idx = (parsed.index as number) ?? 0;
+      const existing = acc.toolCallsMap.get(idx);
+      if (existing) existing.arguments += delta.partial_json;
+    }
+    return;
+  }
+
+  // content_block_start: tool_use block starts here (id + name)
+  if (type === 'content_block_start') {
+    const block = parsed.content_block as Record<string, unknown> | undefined;
+    if (block?.type === 'tool_use') {
+      const idx = (parsed.index as number) ?? 0;
+      acc.toolCallsMap.set(idx, {
+        id: (block.id as string) || '',
+        name: (block.name as string) || '',
+        arguments: '',
+      });
+    }
+    return;
+  }
+
+  // message_delta: contains output token count + stop reason
+  if (type === 'message_delta') {
+    const deltaUsage = parsed.usage as Record<string, unknown> | undefined;
+    if (deltaUsage) {
+      acc.usage = mergeAnthropicUsage(acc.usage, deltaUsage);
+      update({ fullContent: acc.fullContent, reasoningContent: acc.reasoningContent, usage: acc.usage });
+    }
+    return;
+  }
+}
+
+/** 合并 Anthropic 分批下发的 usage 字段（input 在 message_start，output 在 message_delta） */
+function mergeAnthropicUsage(
+  existing: TokenUsage | undefined,
+  raw: Record<string, unknown>,
+): TokenUsage {
+  const base = existing ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  if (raw.input_tokens != null)               base.promptTokens     = raw.input_tokens as number;
+  if (raw.output_tokens != null)              base.completionTokens = raw.output_tokens as number;
+  if (raw.cache_read_input_tokens != null)    base.cacheReadTokens  = raw.cache_read_input_tokens as number;
+  if (raw.cache_creation_input_tokens != null) base.cacheWriteTokens = raw.cache_creation_input_tokens as number;
+  base.totalTokens = base.promptTokens + base.completionTokens;
+  return base;
+}
+
+// ─── OpenAI usage extractor ─────────────────────────────────────────────────
+
+function extractUsageOpenAI(u: Record<string, unknown>): TokenUsage {
   const base: TokenUsage = {
     promptTokens: (u.prompt_tokens as number) || 0,
     completionTokens: (u.completion_tokens as number) || 0,
     totalTokens: (u.total_tokens as number) || 0,
   };
 
-  // OpenAI o1 / reasoning tokens
   const compDetails = u.completion_tokens_details as Record<string, unknown> | undefined;
-  if (compDetails?.reasoning_tokens) {
-    base.reasoningTokens = compDetails.reasoning_tokens as number;
-  }
+  if (compDetails?.reasoning_tokens) base.reasoningTokens = compDetails.reasoning_tokens as number;
 
-  // OpenAI prompt cache
   const promptDetails = u.prompt_tokens_details as Record<string, unknown> | undefined;
-  if (promptDetails?.cached_tokens) {
-    base.cachedTokens = promptDetails.cached_tokens as number;
-  }
+  if (promptDetails?.cached_tokens) base.cachedTokens = promptDetails.cached_tokens as number;
 
-  // Anthropic cache
-  if (u.cache_read_input_tokens) base.cacheReadTokens = u.cache_read_input_tokens as number;
+  if (u.cache_read_input_tokens)    base.cacheReadTokens  = u.cache_read_input_tokens as number;
   if (u.cache_creation_input_tokens) base.cacheWriteTokens = u.cache_creation_input_tokens as number;
-
-  // GLM/DeepSeek: completion_tokens_details.reasoning_tokens 或直接 reasoning_tokens
-  if (!base.reasoningTokens && u.reasoning_tokens) {
-    base.reasoningTokens = u.reasoning_tokens as number;
-  }
+  if (!base.reasoningTokens && u.reasoning_tokens) base.reasoningTokens = u.reasoning_tokens as number;
 
   return base;
 }
+
+// ─── Shared helpers ──────────────────────────────────────────────────────────
 
 function buildCompleteBody(
   content: string,
