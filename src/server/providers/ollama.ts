@@ -16,7 +16,7 @@ export class OllamaProvider extends Provider {
     return `${base}/${cleanPath}`;
   }
 
-  getUpstreamHeaders(): Record<string, string> {
+  getUpstreamHeaders(incomingHeaders?: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.config.headers) Object.assign(headers, this.config.headers);
     return headers;

@@ -56,7 +56,7 @@ export async function handleProxy(
 
   // Build upstream request
   const upstreamUrl = provider.getUpstreamUrl(path);
-  const upstreamHeaders = provider.getUpstreamHeaders();
+  const upstreamHeaders = provider.getUpstreamHeaders(reqHeaders);
 
   const isStream = body.stream === true;
 

@@ -20,9 +20,13 @@ export class OpenAIProvider extends Provider {
     return `${base}/v1/${cleanPath}`;
   }
 
-  getUpstreamHeaders(): Record<string, string> {
+  getUpstreamHeaders(incomingHeaders?: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+    if (this.config.apiKey) {
+      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+    } else if (incomingHeaders?.['authorization']) {
+      headers['Authorization'] = incomingHeaders['authorization'];
+    }
     if (this.config.headers) Object.assign(headers, this.config.headers);
     return headers;
   }

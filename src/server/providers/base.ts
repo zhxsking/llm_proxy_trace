@@ -16,8 +16,10 @@ export abstract class Provider {
   /** Build the upstream URL for a given request path */
   abstract getUpstreamUrl(requestPath: string): string;
 
-  /** Build headers to send to the upstream provider */
-  abstract getUpstreamHeaders(): Record<string, string>;
+  /** Build headers to send to the upstream provider.
+   * @param incomingHeaders  Original request headers — used to pass-through auth when provider has no apiKey configured.
+   */
+  abstract getUpstreamHeaders(incomingHeaders?: Record<string, string>): Record<string, string>;
 
   /** Check if this provider handles the given request path */
   abstract matchesPath(path: string): boolean;
