@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,7 +67,56 @@ function resolveConfigPath(cwd: string): string {
   return path.join(appDataDir, 'lpt.config.yaml');
 }
 
+/**
+ * llmpt claude [...args]
+ * 用临时 settings 文件覆盖 ANTHROPIC_BASE_URL，让 Claude Code 流量过 LPT 代理。
+ * Claude Code 的 settings.json 里的 env 字段会覆盖进程环境变量，
+ * 因此必须通过 --settings 注入，而不是仅靠环境变量。
+ */
+function runClaude(args: string[], port: number): void {
+  // 写临时 settings 文件，覆盖 ANTHROPIC_BASE_URL
+  const settingsPath = path.join(os.tmpdir(), 'lpt-claude-settings.json');
+  const settings = { env: { ANTHROPIC_BASE_URL: `http://localhost:${port}` } };
+  fs.writeFileSync(settingsPath, JSON.stringify(settings), 'utf-8');
+
+  // 若用户已经传了 --settings，不重复注入（尊重用户的配置）
+  const hasSettings = args.some(a => a === '--settings');
+  const claudeArgs = hasSettings ? args : ['--settings', settingsPath, ...args];
+
+  const child = spawn('claude', claudeArgs, {
+    stdio: 'inherit',
+    // Windows 下 claude 是 .exe，不需要 shell；shell:true 在 Windows 上会产生安全警告
+    windowsVerbatimArguments: false,
+  });
+
+  child.on('error', (err) => {
+    console.error('❌ 启动 claude 失败：', err.message);
+    console.error('   请确保已安装 Claude Code：https://claude.ai/code');
+    process.exit(1);
+  });
+
+  child.on('exit', (code) => {
+    process.exit(code ?? 0);
+  });
+}
+
 async function main() {
+  const args = process.argv.slice(2);
+
+  // ── 子命令：llmpt claude [...claude args] ──
+  if (args[0] === 'claude') {
+    const claudeArgs = args.slice(1);
+    const cwd = process.cwd();
+    const envPath = resolveEnvPath(cwd);
+    const configPath = resolveConfigPath(cwd);
+    const config = loadConfig(configPath, envPath);
+    const port = config.proxy.port;
+    console.log(`🔍 LPT 代理：http://localhost:${port}  →  claude ${claudeArgs.join(' ') || '(interactive)'}`);
+    runClaude(claudeArgs, port);
+    return;
+  }
+
+  // ── 默认：启动 LPT 服务 ──
   console.log('🚀 LPT 启动中...');
 
   const cwd = process.cwd();
