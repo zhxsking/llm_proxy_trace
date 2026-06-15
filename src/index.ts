@@ -96,6 +96,8 @@ async function main() {
   ws.attachToServer(server as any, '/ws');
 
   console.log(`✅ 服务已启动：http://localhost:${config.proxy.port}`);
+  console.log(`📝 配置文件：${envPath}`);
+  console.log(`   修改后重启服务生效`);
 
   // Auto-open dashboard
   if (config.dashboard.autoOpen) {
