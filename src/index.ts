@@ -70,10 +70,16 @@ async function main() {
   console.log('🚀 LPT 启动中...');
 
   const cwd = process.cwd();
+  const appDataDir = getAppDataDir();
   const envPath = resolveEnvPath(cwd);
   const configPath = resolveConfigPath(cwd);
 
   const config = loadConfig(configPath, envPath);
+
+  // 若 trace.dir 仍是默认相对路径，改为 appdata/traces（用户自定义的绝对路径不受影响）
+  if (config.trace.dir === './traces') {
+    config.trace.dir = path.join(appDataDir, 'traces');
+  }
 
   // Create application
   const { app, registry, collector, ws } = createApp(config, configPath);
