@@ -22,7 +22,7 @@ function ensureConfig(configPath: string): void {
   if (fs.existsSync(templatePath)) {
     fs.copyFileSync(templatePath, configPath);
     console.log(`📄 已生成配置文件：${configPath}`);
-    console.log('   请编辑配置文件填入 API Key，然后重新运行 llmpt\n');
+    console.log('   可编辑配置文件填入 API Key，修改后 Ctrl+C 重启生效\n');
   } else {
     console.log(`⚠️  未找到 lpt.config.yaml，将使用默认配置启动`);
     console.log(`   可手动创建 ${configPath} 进行配置\n`);

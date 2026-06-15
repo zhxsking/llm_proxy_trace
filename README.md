@@ -31,7 +31,7 @@
 npx llmpt
 ```
 
-首次运行会在当前目录生成 `lpt.config.yaml` 配置文件，按提示填入 API Key 后即可使用。
+首次运行会在当前目录自动生成 `lpt.config.yaml`，服务同时启动。编辑配置文件填入 API Key 后，Ctrl+C 重启即可生效。
 
 ### 方式二：全局安装
 

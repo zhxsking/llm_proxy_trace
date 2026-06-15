@@ -1,6 +1,6 @@
 {
   "name": "llmpt",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "LLM Proxy Trace - local LLM proxy that captures full traces with real-time Web dashboard",
   "type": "module",
   "main": "dist/index.js",
