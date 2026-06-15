@@ -31,7 +31,7 @@
 npx llmpt
 ```
 
-首次运行会在当前目录自动生成 `lpt.config.yaml`，服务同时启动。编辑配置文件填入 API Key 后，Ctrl+C 重启即可生效。
+首次运行会在系统配置目录自动生成 `.env`，并打印出文件路径。编辑该文件填入 API Key 后，Ctrl+C 重启即可生效。
 
 ### 方式二：全局安装
 
@@ -40,41 +40,35 @@ npm install -g llmpt
 llmpt
 ```
 
-### 方式三：从源码运行
-
-```bash
-git clone https://github.com/zhxsking/llm_proxy_trace.git
-cd llm_proxy_trace
-npm install
-npm run build
-npm start
-```
-
 启动后浏览器打开 `http://localhost:19900`。
 
 ---
 
 ## 配置
 
-启动后编辑当前目录的 `lpt.config.yaml`：
+服务启动时会打印配置文件路径，例如：
 
-```yaml
-proxy:
-  port: 19900          # 代理端口
-
-providers:
-  openai:
-    apiKey: "sk-..."   # OpenAI API Key
-    baseUrl: "https://api.openai.com"
-
-  anthropic:
-    apiKey: "sk-ant-..." # Anthropic API Key
-
-  ollama:
-    baseUrl: "http://localhost:11434"
+```
+📝 配置文件：C:\Users\xxx\AppData\Roaming\llmpt\.env
+   修改后重启服务生效
 ```
 
-修改配置后重启服务生效。
+编辑该 `.env` 文件，取消注释并填入真实值：
+
+```env
+# OpenAI / 兼容接口
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=sk-...
+
+# Anthropic
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Ollama 本地（无需 apiKey）
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+如果当前目录存在 `.env`，会优先使用当前目录的配置（适合开发环境）。修改后重启服务生效。
 
 ---
 
@@ -87,7 +81,7 @@ providers:
 from openai import OpenAI
 client = OpenAI(
     base_url="http://localhost:19900/v1",
-    api_key="any",   # 代理会替换为配置文件中的真实 key
+    api_key="any",   # 代理会替换为 .env 中的真实 key
 )
 ```
 
@@ -114,7 +108,7 @@ ANTHROPIC_BASE_URL=http://localhost:19900
 | 字体 | 系统默认字体栈 |
 | 实时通信 | WebSocket (`ws`) |
 | Markdown | react-markdown + remark-gfm + highlight.js |
-| 配置 | js-yaml |
+| 配置 | dotenv (.env) |
 | 加密 | Node.js crypto（AES-256-GCM） |
 
 ---
