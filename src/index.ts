@@ -12,20 +12,20 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * 若当前目录没有 lpt.config.yaml，从包内模板复制一份
+ * 若当前目录没有 .env，从包内 .env.example 复制一份
  */
-function ensureConfig(configPath: string): void {
-  if (fs.existsSync(configPath)) return;
+function ensureEnv(cwd: string): void {
+  const envPath = path.resolve(cwd, '.env');
+  if (fs.existsSync(envPath)) return;
 
-  // 模板在包根目录（dist/ 的上一级）
-  const templatePath = path.resolve(__dirname, '..', 'lpt.config.yaml');
-  if (fs.existsSync(templatePath)) {
-    fs.copyFileSync(templatePath, configPath);
-    console.log(`📄 已生成配置文件：${configPath}`);
-    console.log('   可编辑配置文件填入 API Key，修改后 Ctrl+C 重启生效\n');
+  const examplePath = path.resolve(__dirname, '..', '.env.example');
+  if (fs.existsSync(examplePath)) {
+    fs.copyFileSync(examplePath, envPath);
+    console.log(`📄 已生成配置文件：${envPath}`);
+    console.log('   请编辑 .env 填入 API Key，修改后 Ctrl+C 重启生效\n');
   } else {
-    console.log(`⚠️  未找到 lpt.config.yaml，将使用默认配置启动`);
-    console.log(`   可手动创建 ${configPath} 进行配置\n`);
+    console.log('⚠️  未找到 .env，将使用默认配置启动');
+    console.log('   可手动创建 .env 填入 OPENAI_API_KEY 等变量\n');
   }
 }
 
@@ -34,7 +34,7 @@ async function main() {
 
   // Load configuration — pass explicit path so saveConfig writes back to the same file
   const configPath = path.resolve(process.cwd(), 'lpt.config.yaml');
-  ensureConfig(configPath);
+  ensureEnv(process.cwd());
   const config = loadConfig(configPath);
   console.log(`📋 配置加载成功：端口 ${config.proxy.port}`);
 
