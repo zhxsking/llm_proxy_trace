@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -88,6 +89,25 @@ async function main() {
   if (config.trace.dir === './traces') {
     config.trace.dir = path.join(appDataDir, 'traces');
   }
+
+  // 检查端口是否被占用（同时探测 IPv4/IPv6）
+  await Promise.all(['0.0.0.0', '::'].map(host =>
+    new Promise<void>((resolve, reject) => {
+      const tester = createServer();
+      tester.once('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') {
+          console.error(`❌ 端口 ${config.proxy.port} 已被占用`);
+          console.error(`   请关闭占用该端口的程序后重试`);
+          console.error(`   查找占用进程（Windows）：netstat -ano | findstr :${config.proxy.port}`);
+          console.error(`   查找占用进程（macOS/Linux）：lsof -i :${config.proxy.port}`);
+          process.exit(1);
+        }
+        reject(err);
+      });
+      tester.once('listening', () => { tester.close(); resolve(); });
+      tester.listen(config.proxy.port, host);
+    })
+  ));
 
   // Create application
   const { app, registry, collector, ws } = createApp(config, configPath);
