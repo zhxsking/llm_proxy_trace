@@ -68,7 +68,8 @@ export async function handleProxy(
       body: method !== 'GET' ? JSON.stringify(body) : undefined,
     });
 
-    if (!upstreamResp.ok && !isStream) {
+    // Non-2xx: always treat as error regardless of stream flag
+    if (!upstreamResp.ok) {
       const errorBody = await upstreamResp.text();
       collector.recordResponse(trace.id, upstreamResp.status, Object.fromEntries(upstreamResp.headers.entries()), errorBody);
       collector.markError(trace.id, 'UPSTREAM_ERROR', `Upstream returned ${upstreamResp.status}: ${errorBody.slice(0, 200)}`);
