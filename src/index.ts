@@ -6,14 +6,38 @@
 import { createApp } from './server/app.js';
 import { loadConfig } from './server/config/loader.js';
 import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 若当前目录没有 lpt.config.yaml，从包内模板复制一份
+ */
+function ensureConfig(configPath: string): void {
+  if (fs.existsSync(configPath)) return;
+
+  // 模板在包根目录（dist/ 的上一级）
+  const templatePath = path.resolve(__dirname, '..', 'lpt.config.yaml');
+  if (fs.existsSync(templatePath)) {
+    fs.copyFileSync(templatePath, configPath);
+    console.log(`📄 已生成配置文件：${configPath}`);
+    console.log('   请编辑配置文件填入 API Key，然后重新运行 llmpt\n');
+  } else {
+    console.log(`⚠️  未找到 lpt.config.yaml，将使用默认配置启动`);
+    console.log(`   可手动创建 ${configPath} 进行配置\n`);
+  }
+}
 
 async function main() {
   console.log('🚀 LPT (LLM Proxy Trace) 启动中...');
 
   // Load configuration — pass explicit path so saveConfig writes back to the same file
   const configPath = path.resolve(process.cwd(), 'lpt.config.yaml');
+  ensureConfig(configPath);
   const config = loadConfig(configPath);
   console.log(`📋 配置加载成功：端口 ${config.proxy.port}`);
+
 
   // Create application
   const { app, registry, collector, ws } = createApp(config, configPath);
