@@ -42,34 +42,6 @@ llmpt
 
 ---
 
-## 与 Claude Code 集成
-
-`llmpt claude` 是为 Claude Code 专门设计的一键命令——自动启动 LPT 代理服务，再拉起 Claude Code 并将其流量路由过来，全程无需手动改任何配置：
-
-```bash
-# 等同于 claude，但所有请求都会被 LPT 拦截记录
-npx llmpt claude
-
-# 传递 claude 参数
-npx llmpt claude --model claude-opus-4-5
-npx llmpt claude -c                        # 继续上次会话
-npx llmpt claude --dangerously-skip-permissions
-```
-
-启动时会打印两行状态，之后完全静默（不污染 Claude Code 的 TUI 界面）：
-
-```
-🚀 LPT 启动中...
-✅ LPT 代理已就绪：http://localhost:19900
-🔍 启动 claude (interactive)
-```
-
-退出 Claude Code 后，LPT 服务也会自动关闭。
-
-> **实现原理**：通过 `claude --settings <tempfile>` 向 Claude Code 注入 `ANTHROPIC_BASE_URL`，使其将 API 请求发往本地代理。无需修改任何全局配置文件。
-
----
-
 ## 配置
 
 首次运行会在系统配置目录自动生成 `.env`，并打印出文件路径。编辑该文件填入 `BASE_URL` 和 `API Key` 后，重启服务即可生效。
@@ -78,7 +50,7 @@ npx llmpt claude --dangerously-skip-permissions
 
 ---
 
-## 接入其他客户端
+## 接入客户端
 
 将 LLM SDK 的 `base_url` 指向本地代理，其余配置保持不变：
 
@@ -99,6 +71,22 @@ OPENAI_API_KEY=any
 # Anthropic
 ANTHROPIC_BASE_URL=http://localhost:19900
 ```
+
+---
+
+## 与 Claude Code 集成
+
+`llmpt claude` 是为 Claude Code 专门设计的一键命令——自动启动 LPT 代理服务，再拉起 Claude Code 并将其流量路由过来，全程无需手动改任何配置：
+
+```bash
+# 等同于 claude，但所有请求都会被 LPT 拦截记录
+npx llmpt claude
+
+npm install -g llmpt
+llmpt claude
+```
+
+退出 Claude Code 后，LPT 服务也会自动关闭。
 
 ---
 
