@@ -1,19 +1,31 @@
 {
-  "name": "lpt",
-  "version": "0.1.0",
-  "description": "LLM Proxy Trace - 本地大模型代理工具，记录完整Trace日志，Web实时监控",
+  "name": "llmpt",
+  "version": "1.1.0",
+  "description": "LLM Proxy Trace - local LLM proxy that captures full traces with real-time Web dashboard",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
+    "llmpt": "dist/index.js",
     "lpt": "dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "lpt.config.yaml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:web": "vite --config src/web/vite.config.ts",
-    "build": "tsc && vite build src/web",
-    "build:web": "vite build src/web",
+    "build": "tsc && node node_modules/vite/bin/vite.js build src/web",
+    "build:web": "node node_modules/vite/bin/vite.js build src/web",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "llm",

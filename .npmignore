@@ -1,0 +1,21 @@
+# source
+src/
+scripts/
+docs/
+tmp/
+traces/
+traces-test/
+ref/
+
+# config / dev
+.env
+.env.*
+tsconfig.json
+postcss.config.cjs
+tailwind.config.cjs
+.gitignore
+
+# misc
+*.log
+.DS_Store
+AGENTS.md

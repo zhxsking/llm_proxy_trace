@@ -23,35 +23,58 @@
 
 ## 快速开始
 
-### 安装依赖
+### 方式一：npx 一键启动（推荐）
+
+无需安装，直接运行：
 
 ```bash
+npx llmpt
+```
+
+首次运行会在当前目录生成 `lpt.config.yaml` 配置文件，按提示填入 API Key 后即可使用。
+
+### 方式二：全局安装
+
+```bash
+npm install -g llmpt
+llmpt
+```
+
+### 方式三：从源码运行
+
+```bash
+git clone https://github.com/zhxsking/llm_proxy_trace.git
+cd llm_proxy_trace
 npm install
+npm run build
+npm start
 ```
 
-### 启动
+启动后浏览器打开 `http://localhost:19900`。
 
-**Windows:**
-```bat
-scripts\start.bat
+---
+
+## 配置
+
+启动后编辑当前目录的 `lpt.config.yaml`：
+
+```yaml
+proxy:
+  port: 19900          # 代理端口
+
+providers:
+  openai:
+    apiKey: "sk-..."   # OpenAI API Key
+    baseUrl: "https://api.openai.com"
+
+  anthropic:
+    apiKey: "sk-ant-..." # Anthropic API Key
+
+  ollama:
+    baseUrl: "http://localhost:11434"
 ```
 
-**Linux / macOS:**
-```bash
-bash scripts/start.sh
-```
-
-启动后浏览器自动打开 `http://localhost:19900`。
-
-### 开发模式（热重载）
-
-```bash
-# 终端 1 — 后端
-npm run dev
-
-# 终端 2 — 前端 HMR
-npm run dev:web
-```
+修改配置后重启服务生效。
 
 ---
 
