@@ -140,6 +140,20 @@ async function main() {
     process.stdout.write(`✅ LPT 代理已就绪：http://localhost:${config.proxy.port}\n`);
     process.stdout.write(`🔍 启动 claude ${claudeArgs.join(' ') || '(interactive)'}\n\n`);
 
+    // 自动打开 Dashboard
+    if (config.dashboard.autoOpen) {
+      const url = `http://localhost:${config.proxy.port}`;
+      setTimeout(async () => {
+        try {
+          const { exec } = await import('node:child_process');
+          const cmd = process.platform === 'win32' ? `start ${url}` :
+                     process.platform === 'darwin' ? `open ${url}` :
+                     `xdg-open ${url}`;
+          exec(cmd);
+        } catch { /* ignore */ }
+      }, 1000);
+    }
+
     // 写临时文件注入 ANTHROPIC_BASE_URL（claude 退出后删除）
     const hasSettings = claudeArgs.some(a => a === '--settings' || a.startsWith('--settings='));
     let settingsFile: string | null = null;
