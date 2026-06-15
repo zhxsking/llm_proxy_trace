@@ -10,7 +10,7 @@ import os
 import anthropic
 
 BASE_URL = os.getenv("LPT_BASE_URL", "http://localhost:19900")
-MODEL    = os.getenv("LPT_MODEL",    "claude-sonnet-4-6")
+MODEL    = os.getenv("LPT_MODEL",    "claude-sonnet-4-6")  # claude-sonnet-4-6 / claude-opus-4-6
 STREAM   = os.getenv("IS_STREAM", "true").lower() != "false"
 
 client = anthropic.Anthropic(
@@ -18,50 +18,63 @@ client = anthropic.Anthropic(
     base_url=BASE_URL,
 )
 
+THINKING_CONFIG = {
+    "type": "adaptive",
+    "effort": "low",        # low / medium / high
+    "display": "summarized", # "summarized" 返回思考摘要；"omitted" 不返回
+}
+
 MESSAGES = [
-    {"role": "user", "content": "用一句话介绍你自己。"},
+    {"role": "user", "content": "先思考一下，然后用一句话介绍你自己。"},
 ]
 
 print(f"=== LPT Anthropic 测试  model={MODEL}  stream={STREAM} ===\n")
 
 if STREAM:
-    thinking_done = False
-    print("--- 思考过程 ---")
+    current_block_type = None
+    thinking_started = False
+    text_started = False
+
     with client.messages.stream(
         model=MODEL,
         max_tokens=16000,
-        thinking={"type": "enabled", "budget_tokens": 10000},
+        thinking=THINKING_CONFIG,
         messages=MESSAGES,
     ) as stream:
         for event in stream:
-            # content_block_delta 事件
-            if event.type == "content_block_delta":
+            if event.type == "content_block_start":
+                current_block_type = event.content_block.type
+                if current_block_type == "thinking" and not thinking_started:
+                    print("--- 思考过程 ---")
+                    thinking_started = True
+                elif current_block_type == "text" and not text_started:
+                    print("\n--- 回答 ---")
+                    text_started = True
+
+            elif event.type == "content_block_delta":
                 delta = event.delta
                 if delta.type == "thinking_delta":
                     print(delta.thinking, end="", flush=True)
                 elif delta.type == "text_delta":
-                    if not thinking_done:
-                        print("\n--- 回答 ---")
-                        thinking_done = True
                     print(delta.text, end="", flush=True)
 
-        # 最终 usage
         msg = stream.get_final_message()
         u = msg.usage
         print(f"\n\nTokens: input={u.input_tokens}  output={u.output_tokens}")
+
 else:
     resp = client.messages.create(
         model=MODEL,
         max_tokens=16000,
-        thinking={"type": "enabled", "budget_tokens": 10000},
+        thinking=THINKING_CONFIG,
         messages=MESSAGES,
     )
     for block in resp.content:
         if block.type == "thinking":
             print("--- 思考过程 ---")
-            print(block.thinking)
+            print(block.thinking or "[thinking omitted]")
         elif block.type == "text":
-            print("--- 回答 ---")
+            print("\n--- 回答 ---")
             print(block.text)
     u = resp.usage
     print(f"\nTokens: input={u.input_tokens}  output={u.output_tokens}")
