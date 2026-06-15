@@ -74,18 +74,14 @@ function resolveConfigPath(cwd: string): string {
  * 因此必须通过 --settings 注入，而不是仅靠环境变量。
  */
 function runClaude(args: string[], port: number): void {
-  // 写临时 settings 文件，覆盖 ANTHROPIC_BASE_URL
-  const settingsPath = path.join(os.tmpdir(), 'lpt-claude-settings.json');
-  const settings = { env: { ANTHROPIC_BASE_URL: `http://localhost:${port}` } };
-  fs.writeFileSync(settingsPath, JSON.stringify(settings), 'utf-8');
-
-  // 若用户已经传了 --settings，不重复注入（尊重用户的配置）
-  const hasSettings = args.some(a => a === '--settings');
-  const claudeArgs = hasSettings ? args : ['--settings', settingsPath, ...args];
+  // Claude Code 的 settings.json env 字段会覆盖进程环境变量，
+  // 必须通过 --settings 注入才能覆盖。直接传内联 JSON 字符串即可（无需临时文件）。
+  const hasSettings = args.some(a => a === '--settings' || a.startsWith('--settings='));
+  const settingsJson = JSON.stringify({ env: { ANTHROPIC_BASE_URL: `http://localhost:${port}` } });
+  const claudeArgs = hasSettings ? args : ['--settings', settingsJson, ...args];
 
   const child = spawn('claude', claudeArgs, {
     stdio: 'inherit',
-    // Windows 下 claude 是 .exe，不需要 shell；shell:true 在 Windows 上会产生安全警告
     windowsVerbatimArguments: false,
   });
 
