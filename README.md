@@ -1,6 +1,6 @@
 # LPT — LLM Proxy Trace
 
-> 本地 LLM 代理工具，零侵入地拦截并可视化所有 OpenAI / Anthropic / Ollama API 调用
+> 本地 LLM 代理工具，零侵入地拦截并可视化所有 OpenAI / Anthropic API 调用
 
 ```
 你的应用  ──►  http://localhost:19900  ──►  真实 LLM Provider
