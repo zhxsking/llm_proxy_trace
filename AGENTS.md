@@ -63,8 +63,7 @@ lpt/
     │   │   ├── registry.ts      # Provider 注册、路由、模型列表刷新
     │   │   ├── base.ts          # BaseProvider 抽象基类
     │   │   ├── openai.ts        # OpenAI 适配器
-    │   │   ├── anthropic.ts     # Anthropic 适配器
-    │   │   └── ollama.ts        # Ollama 适配器
+    │   │   └── anthropic.ts     # Anthropic 适配器
     │   ├── trace/
     │   │   ├── collector.ts     # 内存 Map + LRU 驱逐 + 写回调
     │   │   ├── writer.ts        # 异步 JSONL 追写、文件轮转

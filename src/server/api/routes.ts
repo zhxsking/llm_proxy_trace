@@ -87,7 +87,7 @@ export function createApiRoutes(
   // PUT /api/providers/:type → 更新某个 type 的配置
   api.put('/providers/:type', async (c) => {
     const type = c.req.param('type') as ProviderType;
-    if (!['openai', 'anthropic', 'ollama'].includes(type)) {
+    if (!['openai', 'anthropic'].includes(type)) {
       return c.json({ error: 'Invalid provider type' }, 400);
     }
     const body = await c.req.json<Partial<ProviderConfig>>();

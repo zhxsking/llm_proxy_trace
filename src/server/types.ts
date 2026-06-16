@@ -54,7 +54,7 @@ export interface ToolCallRecord {
 
 // --- Provider Config ---
 
-export type ProviderType = 'openai' | 'anthropic' | 'ollama';
+export type ProviderType = 'openai' | 'anthropic';
 
 export interface ProviderConfig {
   baseUrl: string;
@@ -65,7 +65,6 @@ export interface ProviderConfig {
 export interface ProvidersConfig {
   openai?: ProviderConfig;
   anthropic?: ProviderConfig;
-  ollama?: ProviderConfig;
 }
 
 // --- Token Usage ---

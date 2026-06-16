@@ -6,7 +6,6 @@ import type { ProvidersConfig, ProviderType } from '../types.js';
 import type { Provider } from './base.js';
 import { OpenAIProvider } from './openai.js';
 import { AnthropicProvider } from './anthropic.js';
-import { OllamaProvider } from './ollama.js';
 
 export class ProviderRegistry {
   private providers: Map<ProviderType, Provider> = new Map();
@@ -15,7 +14,6 @@ export class ProviderRegistry {
   registerAll(config: ProvidersConfig): void {
     if (config.openai) this.providers.set('openai', new OpenAIProvider(config.openai));
     if (config.anthropic) this.providers.set('anthropic', new AnthropicProvider(config.anthropic));
-    if (config.ollama) this.providers.set('ollama', new OllamaProvider(config.ollama));
   }
 
   /** Get a provider by type */
@@ -36,11 +34,10 @@ export class ProviderRegistry {
   /**
    * Resolve provider for a request path.
    * 1. Anthropic path match (/messages)
-   * 2. Ollama path match (/api/*)
-   * 3. Fallback to openai
+   * 2. Fallback to openai
    */
   resolveProvider(requestPath: string): Provider | undefined {
-    // Path-specific matching first (Anthropic, Ollama have distinct paths)
+    // Anthropic has distinct paths, match first
     for (const provider of this.providers.values()) {
       if (provider.type !== 'openai' && provider.matchesPath(requestPath)) {
         return provider;

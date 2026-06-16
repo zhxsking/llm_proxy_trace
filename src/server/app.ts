@@ -70,10 +70,9 @@ export function createApp(config: AppConfig, configPath?: string): AppContext {
   app.get('/health', (c) => c.json({ status: 'ok', proxy: true }));
 
   // --- Proxy Routes ---
-  // Models endpoint（返回空列表，不再远程拉取）
+  // Models endpoint（返回空列表）
   app.get('/v1/models', (c) => c.json({ object: 'list', data: [] }));
   app.get('/models', (c) => c.json({ object: 'list', data: [] }));
-  app.get('/api/tags', (c) => c.json({ models: [] }));
   // OpenAI-compatible completions
   app.post('/v1/chat/completions', async (c) => handleProxy(c, registry, collector, ws));
   app.post('/chat/completions', async (c) => handleProxy(c, registry, collector, ws));
@@ -82,10 +81,6 @@ export function createApp(config: AppConfig, configPath?: string): AppContext {
 
   // Anthropic-compatible
   app.post('/v1/messages', async (c) => handleProxy(c, registry, collector, ws));
-
-  // Ollama-compatible
-  app.post('/api/chat', async (c) => handleProxy(c, registry, collector, ws));
-  app.post('/api/generate', async (c) => handleProxy(c, registry, collector, ws));
 
   // Catch-all for any remaining /v1/* paths (except /api/* management routes)
   app.all('/v1/*', async (c) => handleProxy(c, registry, collector, ws));

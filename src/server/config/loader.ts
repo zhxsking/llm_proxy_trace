@@ -27,13 +27,12 @@ function loadDotEnv(envPath: string): void {
 
 /**
  * 用环境变量覆盖 providers 中的 baseUrl / apiKey
- * 规则：OPENAI_BASE_URL / OPENAI_API_KEY / ANTHROPIC_* / OLLAMA_*
+ * 规则：OPENAI_BASE_URL / OPENAI_API_KEY / ANTHROPIC_*
  */
 function applyEnvToProviders(providers: ProvidersConfig): void {
   const map: Record<string, { baseUrl: string; apiKey: string }> = {
     openai:    { baseUrl: 'OPENAI_BASE_URL',    apiKey: 'OPENAI_API_KEY' },
     anthropic: { baseUrl: 'ANTHROPIC_BASE_URL', apiKey: 'ANTHROPIC_API_KEY' },
-    ollama:    { baseUrl: 'OLLAMA_BASE_URL',    apiKey: 'OLLAMA_API_KEY' },
   };
   for (const [type, vars] of Object.entries(map)) {
     const baseUrl = process.env[vars.baseUrl];
@@ -140,7 +139,6 @@ function normalizeProviders(raw: Record<string, unknown> | undefined): Providers
   const result: ProvidersConfig = {};
   if (raw.openai && typeof raw.openai === 'object') result.openai = normalizeProvider(raw.openai as Record<string, unknown>);
   if (raw.anthropic && typeof raw.anthropic === 'object') result.anthropic = normalizeProvider(raw.anthropic as Record<string, unknown>);
-  if (raw.ollama && typeof raw.ollama === 'object') result.ollama = normalizeProvider(raw.ollama as Record<string, unknown>);
   return result;
 }
 
