@@ -79,9 +79,10 @@ ANTHROPIC_BASE_URL=http://localhost:19900
 `llmpt claude` 是为 Claude Code 专门设计的一键命令——自动启动 LPT 代理服务，再拉起 Claude Code 并将其流量路由过来，全程无需手动改任何配置：
 
 ```bash
-# 等同于 claude，但所有请求都会被 LPT 拦截记录
+# 一键启动，等同于 claude，所有请求都会被 LPT 拦截记录
 npx llmpt claude
 
+# 全局安装并启动
 npm install -g llmpt
 llmpt claude
 ```
