@@ -1,6 +1,3 @@
-// TraceDetail - 参考 claude-tap 的展示风格重写
-// 修复: system prompt 从 messages 数组提取, token usage 展示, 消息样式
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, Copy, Check, ChevronDown } from 'lucide-react';
 import type { TraceRecord, ChatMessage, ContentPart, ToolCallRecord, ToolCallInMessage } from '../lib/api';
@@ -62,7 +59,6 @@ export function TraceDetail({ trace }: Props) {
     `${tc.name}(${JSON.stringify(tc.arguments, null, 2)})`
   ).join('\n\n');
 
-  const getToolsText = () => JSON.stringify(tools, null, 2);
 
   return (
     <div ref={detailRef} className="detail-content">
@@ -140,11 +136,10 @@ export function TraceDetail({ trace }: Props) {
 
       {/* Tools Definition */}
       {tools.length > 0 && (
-        <Section title="Tools Definition" defaultOpen={false} badge={`${tools.length}`} copyText={getToolsText()}>
+        <Section title="Tools Definition" defaultOpen={false} badge={`${tools.length}`} copyText={JSON.stringify(tools, null, 2)}>
           <ToolsDefinition tools={tools as ToolDef[]} />
         </Section>
       )}
-
 
       {/* Raw JSON */}
       <Section title="Raw JSON" defaultOpen={false} copyText={JSON.stringify(trace, null, 2)}>
@@ -418,7 +413,7 @@ function MessageBlock({
         <>
           {isPlainText ? (
             // 纯字符串路径（OpenAI / 规范化后的 tool）
-            <TextWithToggle text={content as string} mode={mode} />
+            <TextPane text={content as string} mode={mode} />
           ) : Array.isArray(content) ? (
             // ContentPart[] 路径（Anthropic assistant / 多块内容）
             <div>
@@ -613,22 +608,15 @@ function SystemPromptView({ text }: { text: string }) {
   );
 }
 
-// ─── TextWithToggle：按钮由外部（msg-header-row）控制 ───
+// ─── Thinking Block（可折叠，用于 messages ContentBlock 和 Response 顶部）───
+// marginBottom prop 用于 Response 顶部的 ThinkingSection 场景
 
-function TextWithToggle({ text, mode }: { text: string; mode: 'raw' | 'markdown' }) {
-  if (!text) return null;
-  return <TextPane text={text} mode={mode} />;
-}
-
-
-// ─── Thinking Block（内联折叠，仍用于 messages 里的 ContentBlock）───
-
-function ThinkingBlock({ content }: { content: string }) {
+function ThinkingBlock({ content, marginBottom }: { content: string; marginBottom?: number }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
   const preview = content.slice(0, 80).replace(/\n/g, ' ');
   return (
-    <div className="thinking-block content-block">
+    <div className="thinking-block content-block" style={marginBottom ? { marginBottom } : undefined}>
       <div className="thinking-block-header" onClick={() => setOpen(o => !o)}>
         <span className="thinking-label">
           <span className="thinking-arrow">{open ? '▼' : '▶'}</span>
@@ -648,33 +636,9 @@ function ThinkingBlock({ content }: { content: string }) {
     </div>
   );
 }
-
-// ─── Thinking Section（内联折叠块，默认收起，放在 Response 区域顶部）───
 
 function ThinkingSection({ content }: { content: string }) {
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
-  const preview = content.slice(0, 80).replace(/\n/g, ' ');
-  return (
-    <div className="thinking-block content-block" style={{ marginBottom: '8px' }}>
-      <div className="thinking-block-header" onClick={() => setOpen(o => !o)}>
-        <span className="thinking-label">
-          <span className="thinking-arrow">{open ? '▼' : '▶'}</span>
-          <span>Thinking</span>
-        </span>
-        {open ? (
-          <div className="text-toggle-bar" style={{ marginTop: 0, marginLeft: '4px' }} onClick={e => e.stopPropagation()}>
-            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
-            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
-          </div>
-        ) : (
-          <span className="thinking-preview">{preview}…</span>
-        )}
-        <CopyButton getText={() => content} stopPropagation className="copy-btn" />
-      </div>
-      {open && <TextPane text={content} mode={mode} sans />}
-    </div>
-  );
+  return <ThinkingBlock content={content} marginBottom={8} />;
 }
 
 // ─── Tool Call Block ───
@@ -770,49 +734,6 @@ function ToolDefBlock({ tool }: { tool: ToolDef }) {
           ) : null}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── Stream Events（解析可读内容） ───
-
-function StreamEventList({ events }: { events: Array<{ index: number; timestamp: number; data: string }> }) {
-  // 每个 chunk 显示为一行摘要（不再拆行）
-  const rows = events.map(chunk => {
-    const lines = chunk.data.split('\n').filter(l => l.startsWith('data: '));
-    const deltas: string[] = [];
-    let type = 'raw';
-    for (const line of lines) {
-      const raw = line.slice(6).trim();
-      if (raw === '[DONE]') { type = 'done'; deltas.push('[DONE]'); continue; }
-      try {
-        const p = JSON.parse(raw);
-        const delta = p.choices?.[0]?.delta;
-        if (delta?.content) { type = 'text'; deltas.push(delta.content); }
-        else if (delta?.reasoning_content) { type = 'think'; deltas.push(delta.reasoning_content); }
-        else if (delta?.tool_calls) { type = 'tool'; deltas.push(`tool:${delta.tool_calls[0]?.function?.name || '...'}`); }
-        else if (p.usage) { type = 'usage'; deltas.push(`tokens=${p.usage.total_tokens}`); }
-        else if (p.choices?.[0]?.finish_reason) { type = 'finish'; deltas.push(`finish=${p.choices[0].finish_reason}`); }
-      } catch { deltas.push(raw.slice(0, 60)); }
-    }
-    return { idx: chunk.index, type, summary: deltas.join('') || chunk.data.slice(0, 80) };
-  });
-
-  const typeColor: Record<string, string> = {
-    text: 'var(--green)', think: 'var(--indigo)', tool: 'var(--cyan)',
-    usage: 'var(--amber)', finish: 'var(--text-tertiary)', done: 'var(--text-tertiary)', raw: 'var(--text-tertiary)',
-  };
-
-  return (
-    <div style={{ display: 'grid', gap: '2px' }}>
-      {rows.slice(0, 300).map((row, i) => (
-        <div key={i} className="stream-event-row">
-          <span className="stream-event-idx">#{row.idx}</span>
-          <span style={{ fontSize: '10px', fontWeight: 600, color: typeColor[row.type], minWidth: '44px', flexShrink: 0, fontFamily: 'var(--mono)' }}>{row.type}</span>
-          <span className="stream-event-data" style={{ color: row.type === 'text' ? 'var(--text)' : 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{row.summary}</span>
-        </div>
-      ))}
-      {rows.length > 300 && <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>… 还有 {rows.length - 300} 条</div>}
     </div>
   );
 }
