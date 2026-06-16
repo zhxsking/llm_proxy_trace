@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.3.11 (2026-06-16)
+
+### 重构 & 修复
+- 所有文本默认显示模式改为「渲染 Markdown」（原文 / 渲染 toggle 仍可手动切换）
+- 删除死代码 `StreamEventList`（未被调用）
+- 删除 `TextWithToggle` 空壳包装，直接调用 `TextPane`
+- 合并 `ThinkingBlock` 和 `ThinkingSection` 为单一组件（`marginBottom` prop 区分场景）
+- `getToolsText` helper 内联（仅 `JSON.stringify` 一行）
+
+---
+
 ## v1.3.10 (2026-06-16)
 
 ### 修复
