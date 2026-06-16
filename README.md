@@ -3,7 +3,7 @@
 > 本地 LLM 代理工具，零侵入地拦截并可视化所有 OpenAI / Anthropic API 调用
 
 ```
-你的应用  ──►  http://localhost:19900  ──►  真实 LLM Provider
+你的应用  ──►  http://localhost:19900/v1  ──►  真实 LLM Provider
                         │
                         ▼
              Web Dashboard（实时 Trace 监控）
@@ -13,9 +13,9 @@
 
 ## 功能特性
 
-- **零侵入代理** — 只需把 `base_url` 改为 `http://localhost:19900`，无需修改任何应用代码
+- **零侵入代理** — 只需把 `base_url` 改为 `http://localhost:19900/v1`，无需修改任何应用代码
 - **实时流式追踪** — WebSocket 推送，实时响应
-- **完整 Trace 记录** — 请求体、响应体、思考链（thinking）、Tool Call、Token 用量全记录
+- **完整 Trace 记录** — 请求体、响应体、思考链（thinking）、Tool Call、Token 用量全记录，web 前端实时查看
 - **Markdown 渲染** — 响应内容支持原文 / Markdown 双视图，代码块语法高亮
 - **Token 用量统计** — 输入/输出/推理/缓存命中 Token 分项展示，实时速度统计
 
@@ -38,7 +38,7 @@ npm install -g llmpt
 llmpt
 ```
 
-启动后浏览器打开 `http://localhost:19900`。
+启动后浏览器自动打开 web 前端 `http://localhost:19900`。
 
 ---
 
