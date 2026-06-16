@@ -1,6 +1,6 @@
 {
   "name": "llmpt",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "LLM Proxy Trace - local LLM proxy that captures full traces with real-time Web dashboard",
   "type": "module",
   "main": "dist/index.js",
@@ -33,8 +33,7 @@
     "proxy",
     "trace",
     "openai",
-    "anthropic",
-    "ollama"
+    "anthropic"
   ],
   "license": "MIT",
   "dependencies": {
