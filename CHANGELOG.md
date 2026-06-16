@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.10 (2026-06-16)
+
+### 修复
+- 修复：Anthropic assistant text block 在 Markdown 渲染时大量空行问题
+  - 根因：`.content-block` 的 `white-space: pre-wrap` 被 `md-prose` 内部 `<p>`/`<li>` 元素继承，导致每个 `\n` 都被原样保留
+  - 修复：在 CSS 中为 `.content-block .md-prose`（及 `p`/`li`）添加 `white-space: normal` 覆盖
+
+---
+
 ## v1.3.4 (2026-06-16)
 
 ### 重构 & 修复
