@@ -364,7 +364,7 @@ function MessageBlock({
       b => b.type === 'text' || b.type === 'input_text' || b.type === 'output_text'
     );
   const showToggle = (isPlainText && content.trim().length > 0) || hasTextBlock;
-  const [mode, setMode] = useState<'raw' | 'markdown'>(isAssistant ? 'markdown' : 'raw');
+  const [mode, setMode] = useState<'raw' | 'markdown'>('markdown');
 
   const getTextContent = (): string => {
     if (typeof content === 'string') return content;
@@ -596,7 +596,7 @@ function TextPane({
 // ─── System Prompt 独立视图（toggle 在文本框上方）───
 
 function SystemPromptView({ text }: { text: string }) {
-  const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
+  const [mode, setMode] = useState<'raw' | 'markdown'>('markdown');
   return (
     <div>
       <div className="text-toggle-bar" style={{ marginBottom: '6px' }}>
@@ -613,7 +613,7 @@ function SystemPromptView({ text }: { text: string }) {
 
 function ThinkingBlock({ content, marginBottom }: { content: string; marginBottom?: number }) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'raw' | 'markdown'>('raw');
+  const [mode, setMode] = useState<'raw' | 'markdown'>('markdown');
   const preview = content.slice(0, 80).replace(/\n/g, ' ');
   return (
     <div className="thinking-block content-block" style={marginBottom ? { marginBottom } : undefined}>
