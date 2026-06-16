@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.3.4 (2026-06-16)
+
+### 重构 & 修复
+- 引入 `normalizeMessage` 函数，在渲染前将各 Provider 格式统一为内部标准结构，消除双套渲染逻辑
+- 新增统一的 `ToolUseBlock` 组件，OpenAI `tool_calls` 与 Anthropic `tool_use` ContentPart 共用同一套折叠交互
+- `ContentBlock` text 类型去除内嵌 toggle bar，`textMode` prop 由外层 `MessageBlock` 统一下发
+- 修复：Anthropic `tool_result` 消息（role=user）正确显示为 TOOL 角色
+- 修复：Anthropic `tool_use` ContentPart 现在显示函数名并支持折叠（之前始终展开且无名称）
+- 修复：Anthropic `tool_result` 内容读取 `block.content` 字段（之前错误读取 `block.text` 导致内容为空）
+- 修复：Anthropic assistant ContentPart[] 中 text 块 toggle 与 OpenAI 纯字符串路径行为一致
+
+---
+
 ## v1.3.2 (2026-06-16)
 
 ### 修复

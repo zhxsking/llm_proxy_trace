@@ -296,7 +296,59 @@ function Section({
   );
 }
 
-// ─── Message Block ───
+// ─── 消息规范化：将各 Provider 格式统一为内部标准结构后再渲染 ───────────────────
+//
+// 目标：MessageBlock / ContentBlock / ToolUseBlock 只维护一套渲染逻辑。
+//
+// 规范化规则：
+//   1. Anthropic tool_result 消息：
+//      { role:'user', content:[{type:'tool_result', tool_use_id, content}] }
+//      → { role:'tool', content: string, tool_call_id }
+//
+//   2. ContentPart tool_use：统一用 ToolUseBlock 渲染（可折叠，与 OpenAI MsgToolCallBlock 相同交互）
+//
+//   3. ContentPart text block：toggle 统一提到 MessageBlock 顶层 header row，
+//      ContentBlock 只负责渲染文本内容，不再内嵌独立的 toggle bar
+
+interface NormalizedMessage {
+  role: string;
+  /** 纯字符串（OpenAI）或 ContentPart[]（Anthropic/多块） */
+  content: string | ContentPart[];
+  /** OpenAI tool 消息的关联 call id */
+  tool_call_id?: string;
+  /** OpenAI assistant 消息的 tool_calls 列表 */
+  tool_calls?: ToolCallInMessage[];
+}
+
+function normalizeMessage(
+  msg: ChatMessage | { role: string; content: string | ContentPart[] }
+): NormalizedMessage {
+  const role = msg.role;
+  const content = msg.content;
+
+  // Anthropic tool_result：role=user, content 全部是 tool_result block
+  if (
+    role === 'user' &&
+    Array.isArray(content) &&
+    content.length > 0 &&
+    (content as ContentPart[]).every(b => b.type === 'tool_result')
+  ) {
+    const block = (content as ContentPart[])[0];
+    // block.content 是 Anthropic tool_result 的实际内容字段
+    const raw = (block as unknown as Record<string, unknown>).content ?? block.text;
+    const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
+    return { role: 'tool', content: text, tool_call_id: block.tool_use_id };
+  }
+
+  return {
+    role,
+    content,
+    tool_call_id: (msg as ChatMessage).tool_call_id,
+    tool_calls: (msg as ChatMessage).tool_calls,
+  };
+}
+
+// ─── Message Block（唯一入口，接受任意格式，内部先规范化）────────────────────────
 
 function MessageBlock({
   message, isStreaming,
@@ -304,17 +356,28 @@ function MessageBlock({
   message: ChatMessage | { role: string; content: string | ContentPart[] };
   isStreaming?: boolean;
 }) {
-  const role = message.role;
-  const content = message.content;
+  const norm = normalizeMessage(message);
+  const { role, content, tool_calls: toolCalls } = norm;
+
   const isAssistant = role === 'assistant';
   const isPlainText = typeof content === 'string';
-  // toggle 状态提到 MessageBlock 层，传给子组件
+
+  // ContentPart[] 中若含 text block，toggle 统一在顶层 header row，
+  // 并通过 prop 传给各 ContentBlock，避免每个 text block 自己有一套 toggle
+  const hasTextBlock = !isPlainText && Array.isArray(content)
+    && (content as ContentPart[]).some(
+      b => b.type === 'text' || b.type === 'input_text' || b.type === 'output_text'
+    );
+  const showToggle = (isPlainText && content.trim().length > 0) || hasTextBlock;
   const [mode, setMode] = useState<'raw' | 'markdown'>(isAssistant ? 'markdown' : 'raw');
 
   const getTextContent = (): string => {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
-      return (content as ContentPart[]).map(b => b.text || b.thinking || '').filter(Boolean).join('\n\n');
+      return (content as ContentPart[])
+        .map(b => b.text || b.thinking || '')
+        .filter(Boolean)
+        .join('\n\n');
     }
     return '';
   };
@@ -326,10 +389,9 @@ function MessageBlock({
     : role === 'tool' ? 'tool_result'
     : '';
 
-  const toolCalls = (message as ChatMessage).tool_calls;
-  const toolCallId = (message as ChatMessage).tool_call_id;
-  const hasContent = isPlainText ? content.trim().length > 0 : Array.isArray(content) && content.length > 0;
-  const showToggle = isPlainText && content.trim().length > 0;
+  const hasContent = isPlainText
+    ? content.trim().length > 0
+    : Array.isArray(content) && content.length > 0;
   const [collapsed, setCollapsed] = useState(role === 'tool');
 
   return (
@@ -343,40 +405,55 @@ function MessageBlock({
           <span className={`msg-collapse-arrow${collapsed ? '' : ' open'}`}>▶</span>
           {role.toUpperCase()}
         </span>
-        {showToggle && (
-          <div className="text-toggle-bar" style={{ marginLeft: '8px', marginTop: 0, display: collapsed ? 'none' : undefined }}>
+        {showToggle && !collapsed && (
+          <div className="text-toggle-bar" style={{ marginLeft: '8px', marginTop: 0 }}>
             <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
             <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
           </div>
         )}
         <span style={{ marginLeft: 'auto' }}><CopyButton getText={getTextContent} /></span>
       </div>
+
       {!collapsed && (
         <>
           {isPlainText ? (
+            // 纯字符串路径（OpenAI / 规范化后的 tool）
             <TextWithToggle text={content as string} mode={mode} />
           ) : Array.isArray(content) ? (
+            // ContentPart[] 路径（Anthropic assistant / 多块内容）
             <div>
               {(content as ContentPart[]).map((block, i) => (
-                <ContentBlock key={i} block={block} isStreaming={isStreaming && i === (content as ContentPart[]).length - 1} />
+                <ContentBlock
+                  key={i}
+                  block={block}
+                  // 外层统一的 mode 传入，text block 直接用，其余 block 忽略
+                  textMode={hasTextBlock ? mode : 'markdown'}
+                  isStreaming={isStreaming && i === (content as ContentPart[]).length - 1}
+                />
               ))}
             </div>
           ) : content ? (
             <JsonTree data={content} />
           ) : null}
+
           {toolCalls && toolCalls.length > 0 && (
             <div className="msg-tool-calls">
               {toolCalls.map((tc) => (
-                <MsgToolCallBlock key={tc.id} toolCall={tc} />
+                <ToolUseBlock key={tc.id} name={tc.function.name} callId={tc.id} rawArgs={tc.function.arguments} />
               ))}
             </div>
           )}
         </>
       )}
+
       {collapsed && (hasContent || (toolCalls && toolCalls.length > 0)) && (
         <div className="msg-collapsed-hint">
           {[
-            hasContent ? (isPlainText ? `${(content as string).slice(0, 60).replace(/\n/g, ' ')}…` : `${(content as ContentPart[]).length} 块`) : '',
+            hasContent
+              ? (isPlainText
+                  ? `${(content as string).slice(0, 60).replace(/\n/g, ' ')}…`
+                  : `${(content as ContentPart[]).length} 块`)
+              : '',
             toolCalls?.length ? `${toolCalls.length} tool_call` : '',
           ].filter(Boolean).join(' · ')}
         </div>
@@ -385,68 +462,102 @@ function MessageBlock({
   );
 }
 
-// ─── Message Tool Call Block（messages 里 assistant 的 tool_calls）───
+// ─── 统一 Tool Use Block（OpenAI tool_calls + Anthropic tool_use ContentPart 共用）───
+//
+// 接受两种调用方式：
+//   a. OpenAI：name / callId / rawArgs（JSON string）
+//   b. Anthropic ContentPart：直接传 block，内部提取 name / id / input
 
-function MsgToolCallBlock({ toolCall }: { toolCall: ToolCallInMessage }) {
+interface ToolUseBlockProps {
+  // 方式 a（OpenAI tool_calls / MsgToolCallBlock）
+  name?: string;
+  callId?: string;
+  rawArgs?: string;       // JSON string，需要 parse
+  // 方式 b（Anthropic ContentPart tool_use）
+  block?: ContentPart;    // block.name / block.id / block.input（已经是对象）
+}
+
+function ToolUseBlock({ name, callId, rawArgs, block }: ToolUseBlockProps) {
   const [open, setOpen] = useState(false);
-  let args: unknown = toolCall.function.arguments;
-  try { args = JSON.parse(toolCall.function.arguments); } catch { /* keep raw */ }
-  const argCount = typeof args === 'object' && args !== null ? Object.keys(args).length : 0;
+
+  const fnName   = name   ?? block?.name   ?? 'tool_use';
+  const fnCallId = callId ?? block?.id     ?? '';
+
+  // 参数：rawArgs 是 JSON string（OpenAI），block.input 是已解析对象（Anthropic）
+  let args: unknown = block?.input ?? rawArgs;
+  if (typeof args === 'string') {
+    try { args = JSON.parse(args); } catch { /* keep raw string */ }
+  }
+  const argCount = args && typeof args === 'object' ? Object.keys(args as object).length : 0;
+
   return (
     <div className="tool-block">
       <div className="tool-block-header" onClick={() => setOpen(o => !o)}>
         <span className={`tb-arrow${open ? ' open' : ''}`}>&#9654;</span>
-        <span className="tb-name">{toolCall.function.name}</span>
+        <span className="tb-name">{fnName}</span>
         {!open && argCount > 0 && <span className="tb-desc">({argCount} args)</span>}
+        {fnCallId && (
+          <span style={{ marginLeft: 'auto', opacity: 0.45, fontSize: '11px', fontFamily: 'var(--mono)' }}>
+            {fnCallId}
+          </span>
+        )}
       </div>
       {open && (
         <div className="tool-block-body open">
-          {typeof args === 'object' ? <JsonTree data={args} /> : <pre className="text-raw">{String(args)}</pre>}
+          {typeof args === 'object'
+            ? <JsonTree data={args} />
+            : <pre className="text-raw">{String(args)}</pre>}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Content Block ───
+// ─── Content Block（只负责单个 ContentPart 的渲染，不含 toggle 逻辑）────────────
 
-function ContentBlock({ block, isStreaming }: { block: ContentPart; isStreaming?: boolean }) {
-  const [mode, setMode] = useState<'raw' | 'markdown'>('markdown');
+function ContentBlock({
+  block, textMode, isStreaming,
+}: {
+  block: ContentPart;
+  /** 外层 MessageBlock 传入的 raw/markdown 模式，仅对 text 类型生效 */
+  textMode?: 'raw' | 'markdown';
+  isStreaming?: boolean;
+}) {
+  const mode = textMode ?? 'markdown';
+
   if (block.type === 'text' || block.type === 'input_text' || block.type === 'output_text') {
-    const text = block.text || '';
+    // toggle 由外层 MessageBlock 统一控制，这里只渲染文本内容
     return (
       <div className="content-block">
-        <div className="msg-header-row" style={{ marginBottom: '4px' }}>
-          <div className="text-toggle-bar" style={{ marginTop: 0 }}>
-            <button className={`text-toggle-btn${mode === 'raw' ? ' active' : ''}`} onClick={() => setMode('raw')}>原文</button>
-            <button className={`text-toggle-btn${mode === 'markdown' ? ' active' : ''}`} onClick={() => setMode('markdown')}>渲染</button>
-          </div>
-        </div>
-        <TextPane text={text} mode={mode} isStreaming={isStreaming} />
+        <TextPane text={block.text || ''} mode={mode} isStreaming={isStreaming} />
       </div>
     );
   }
-  if (block.type === 'thinking') return <ThinkingBlock content={block.thinking || ''} />;
+
+  if (block.type === 'thinking') {
+    return <ThinkingBlock content={block.thinking || ''} />;
+  }
+
   if (block.type === 'tool_use') {
-    return (
-      <div className="content-block block-framed">
-        <span className="tool-use-label">⚙ {block.name || 'tool_use'}</span>
-        <JsonTree data={block.input} />
-      </div>
-    );
+    // 复用 ToolUseBlock，与 OpenAI MsgToolCallBlock 相同交互
+    return <ToolUseBlock block={block} />;
   }
+
   if (block.type === 'tool_result') {
+    // Anthropic tool_result 作为独立 ContentPart（极少见，通常已由 normalizeMessage 处理）
+    const raw = (block as unknown as Record<string, unknown>).content ?? block.text;
     return (
       <div className="content-block block-framed" style={{ borderColor: 'var(--purple)', background: 'var(--purple-bg)' }}>
         <span className="tool-use-label" style={{ color: 'var(--purple)', background: 'color-mix(in srgb, var(--purple) 15%, transparent)' }}>
           ↩ tool_result: {block.tool_use_id || ''}
         </span>
         <div className="content-block-text">
-          {typeof block.text === 'string' ? block.text : <JsonTree data={block.text} />}
+          {typeof raw === 'string' ? raw : <JsonTree data={raw} />}
         </div>
       </div>
     );
   }
+
   return <JsonTree data={block} />;
 }
 
