@@ -43,6 +43,9 @@ export function TraceDetail({ trace }: Props) {
   const toolCalls = trace.toolCalls || [];
   const usage = trace.usage;
 
+  // 从 response.body 提取 assistant tool_calls（用于 Response section 渲染）
+  const responseToolCalls = extractResponseToolCalls(trace);
+
   // 获取各 Section 的复制内容
   const getMessagesText = () => messages.map(m => {
     const c = typeof m.content === 'string' ? m.content
@@ -103,9 +106,9 @@ export function TraceDetail({ trace }: Props) {
         {thinkingContent && (
           <ThinkingSection content={thinkingContent} />
         )}
-        {responseOnly ? (
+        {(responseOnly || responseToolCalls.length > 0) ? (
           <MessageBlock
-            message={{ role: 'assistant', content: responseOnly }}
+            message={{ role: 'assistant', content: responseOnly ?? '', tool_calls: responseToolCalls.length > 0 ? responseToolCalls : undefined }}
             isStreaming={isStreaming}
           />
         ) : trace.error ? (
@@ -911,4 +914,21 @@ function extractResponseContent(trace: TraceRecord): string | ContentPart[] | nu
 
   if (typeof body.text === 'string') return body.text;
   return null;
+}
+
+/** 从 response.body 提取 assistant tool_calls（OpenAI choices 和 Anthropic content tool_use 两种格式） */
+function extractResponseToolCalls(trace: TraceRecord): ToolCallInMessage[] {
+  const body = trace.response.body as Record<string, unknown> | null;
+  if (!body) return [];
+
+  // OpenAI: choices[0].message.tool_calls
+  if (Array.isArray(body.choices) && body.choices.length > 0) {
+    const message = (body.choices[0] as Record<string, unknown>).message as Record<string, unknown> | undefined;
+    if (message && Array.isArray(message.tool_calls)) {
+      return message.tool_calls as ToolCallInMessage[];
+    }
+  }
+
+  // Anthropic: content[].type === 'tool_use' — 已经作为 ContentPart 在 responseContent 里渲染，无需重复
+  return [];
 }
