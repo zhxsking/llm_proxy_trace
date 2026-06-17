@@ -323,11 +323,16 @@ function normalizeMessage(
     content.length > 0 &&
     (content as ContentPart[]).every(b => b.type === 'tool_result')
   ) {
-    const block = (content as ContentPart[])[0];
-    // block.content 是 Anthropic tool_result 的实际内容字段
-    const raw = (block as unknown as Record<string, unknown>).content ?? block.text;
-    const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
-    return { role: 'tool', content: text, tool_call_id: block.tool_use_id };
+    if (content.length === 1) {
+      // 单个 tool_result：规范化为 role=tool 的纯文本（与 OpenAI tool 消息一致）
+      const block = (content as ContentPart[])[0];
+      const raw = (block as unknown as Record<string, unknown>).content ?? block.text;
+      const text = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
+      return { role: 'tool', content: text, tool_call_id: block.tool_use_id };
+    } else {
+      // 多个 tool_result：保持 ContentPart[] 路径，由 ContentBlock 逐块渲染
+      return { role: 'tool', content: content as ContentPart[] };
+    }
   }
 
   return {

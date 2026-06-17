@@ -610,7 +610,7 @@ body {
   text-overflow: ellipsis;
 }
 .msg-tool-calls {
-  margin-top: 6px;
+  margin-top: 4px;
   display: grid;
   gap: 4px;
 }
@@ -914,6 +914,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+/* content-parts-list 内部的 content-block 不再需要自身的 margin，由 gap 统一控制 */
+.content-parts-list .content-block {
+  margin-top: 0;
+}
+/* thinking-block 自身有 margin:4px 0，在 content-parts-list 内重置避免叠加 */
+.content-parts-list .thinking-block {
+  margin: 0;
 }
 .tool-block-header {
   display: flex;
