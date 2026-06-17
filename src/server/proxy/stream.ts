@@ -32,6 +32,9 @@ export async function proxySSEStream(
   const toolCallsMap: Map<number, { id: string; name: string; arguments: string }> = new Map();
   let usage: TokenUsage | undefined;
 
+  // SSE 行缓冲：一条 data 行可能跨多个 TCP chunk，需要跨 chunk 拼接
+  let lineBuffer = '';
+
   const isAnthropic = providerType === 'anthropic';
 
   const reader = upstreamResponse.body.getReader();
@@ -68,9 +71,12 @@ export async function proxySSEStream(
           // Record chunk for trace
           collector.appendChunk(trace.id, chunk);
 
-          // Parse SSE data lines
-          const lines = chunk.split('\n');
-          for (const line of lines) {
+          // Parse SSE data lines — 用 lineBuffer 跨 chunk 拼接不完整的行
+          const rawLines = (lineBuffer + chunk).split('\n');
+          // 最后一段可能不完整，留到下次 chunk 拼接
+          lineBuffer = rawLines.pop() ?? '';
+
+          for (const line of rawLines) {
             if (!line.startsWith('data: ')) continue;
             const data = line.slice(6).trim();
             if (data === '[DONE]') continue;
