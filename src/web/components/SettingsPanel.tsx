@@ -7,6 +7,8 @@ import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { api, type ProviderInfo } from '../lib/api';
 
+declare const __APP_VERSION__: string;
+
 interface Props {
   onClose: () => void;
 }
@@ -73,6 +75,22 @@ export function SettingsPanel({ onClose }: Props) {
             ))}
           </div>
         )}
+      </div>
+
+      {/* 版本信息 */}
+      <div className="flex items-center justify-end gap-3 pt-1" style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>
+        <span>LPT v{__APP_VERSION__}</span>
+        <span style={{ opacity: 0.35 }}>·</span>
+        <a
+          href="https://github.com/zhxsking/llm_proxy_trace"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}
+        >
+          GitHub ↗
+        </a>
       </div>
     </div>
   );

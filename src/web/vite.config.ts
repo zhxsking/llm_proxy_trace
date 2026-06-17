@@ -7,6 +7,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import yaml from 'js-yaml';
 
+// 读取 package.json 版本，构建时注入为全局常量 __APP_VERSION__
+const pkg = JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf-8')) as { version: string };
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // 从 lpt.config.yaml 读取端口，改端口只需修改配置文件即可生效
@@ -43,6 +46,9 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   build: {
     outDir: path.resolve(__dirname, '../../dist/web'),
