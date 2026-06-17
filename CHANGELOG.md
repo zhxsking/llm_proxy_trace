@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.14 (2026-06-17)
+
+### 修复
+- Raw JSON 面板只展示原始 `request` / `response` 体，去除 LPT 自身归集的 `toolCalls`、`usage`、`status` 等字段
+
+---
+
 ## v1.3.13 (2026-06-17)
 
 ### 修复

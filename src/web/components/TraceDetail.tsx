@@ -22,6 +22,7 @@ export function TraceDetail({ trace }: Props) {
     }
   }, [trace.response, isStreaming]);
 
+  const rawJson = { request: trace.request, response: trace.response };
   const allMessages = (trace.request.body.messages || []) as ChatMessage[];
   const systemPrompt = extractSystem(trace);
   const messages = allMessages.filter(m => m.role !== 'system' && m.role !== 'developer');
@@ -141,9 +142,9 @@ export function TraceDetail({ trace }: Props) {
         </Section>
       )}
 
-      {/* Raw JSON */}
-      <Section title="Raw JSON" defaultOpen={false} copyText={JSON.stringify(trace, null, 2)}>
-        <JsonTree data={trace} />
+      {/* Raw JSON — 只展示原始请求/响应体，不含 LPT 归集字段 */}
+      <Section title="Raw JSON" defaultOpen={false} copyText={JSON.stringify(rawJson, null, 2)}>
+        <JsonTree data={rawJson} />
       </Section>
 
     </div>
