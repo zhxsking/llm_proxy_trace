@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.3.15 (2026-06-17)
+
+### 新增
+- Raw JSON 面板改为展示完整 trace 所有字段
+
+### 修复
+- Response 面板正确显示 assistant 的 tool_calls（OpenAI 格式）
+- Anthropic 多块 ContentPart 之间添加间距，与 OpenAI 排版一致
+- 修复多个 tool_result 在同一 user message 时只显示第一个的问题
+- **SSE 流式解析加跨 chunk 行缓冲**：修复 tool_calls 因 TCP 分包截断而丢失的 bug
+- `llmpt claude` 子命令模式未配置 Anthropic API Key 时打印明确警告
+
+### 变更
+- 移除独立的 Tool Calls section，response body 中已包含 tool_call 信息
+
+---
+
 ## v1.3.14 (2026-06-17)
 
 ### 修复
