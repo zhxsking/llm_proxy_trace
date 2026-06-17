@@ -136,6 +136,11 @@ async function main() {
 
   // ── 子命令模式：启动 claude，claude 退出后关闭 LPT ──
   if (isClaudeSubcommand) {
+    // claude 模式必须有 anthropic provider，否则所有请求会被 LPT 拦截后返回 400
+    if (!config.providers.anthropic?.apiKey) {
+      process.stdout.write(`⚠️  警告：未配置 Anthropic API Key，claude 的网络请求将无法转发！\n`);
+      process.stdout.write(`   请在 ${envPath} 中设置 ANTHROPIC_API_KEY=sk-ant-xxx\n\n`);
+    }
     // 打印状态行（console.log 已被静默，直接写 stdout）
     process.stdout.write(`✅ LPT 代理已就绪：http://localhost:${config.proxy.port}\n`);
     process.stdout.write(`🔍 启动 claude ${claudeArgs.join(' ') || '(interactive)'}\n\n`);
