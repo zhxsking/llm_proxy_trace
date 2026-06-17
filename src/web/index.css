@@ -908,6 +908,13 @@ body {
   overflow: hidden;
   background: var(--bg-card);
 }
+
+/* ContentPart[] 容器：各块之间保持间距（text/thinking/tool_use 混排） */
+.content-parts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .tool-block-header {
   display: flex;
   align-items: baseline;

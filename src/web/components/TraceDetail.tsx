@@ -411,7 +411,7 @@ function MessageBlock({
             <TextPane text={content as string} mode={mode} />
           ) : Array.isArray(content) ? (
             // ContentPart[] 路径（Anthropic assistant / 多块内容）
-            <div>
+            <div className="content-parts-list">
               {(content as ContentPart[]).map((block, i) => (
                 <ContentBlock
                   key={i}
