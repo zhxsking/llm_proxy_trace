@@ -89,7 +89,7 @@ export function SettingsPanel({ onClose }: Props) {
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-tertiary)')}
         >
-          GitHub ↗
+          GitHub
         </a>
       </div>
     </div>
