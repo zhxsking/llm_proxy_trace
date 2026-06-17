@@ -22,7 +22,7 @@ export function TraceDetail({ trace }: Props) {
     }
   }, [trace.response, isStreaming]);
 
-  const rawJson = { request: trace.request, response: trace.response };
+  const rawJson = trace;
   const allMessages = (trace.request.body.messages || []) as ChatMessage[];
   const systemPrompt = extractSystem(trace);
   const messages = allMessages.filter(m => m.role !== 'system' && m.role !== 'developer');
@@ -125,15 +125,6 @@ export function TraceDetail({ trace }: Props) {
           </div>
         )}
       </Section>
-
-      {/* Tool Calls */}
-      {toolCalls.length > 0 && (
-        <Section title="Tool Calls" defaultOpen={true} badge={`${toolCalls.length}`} copyText={getToolCallsText()}>
-          <div style={{ display: 'grid', gap: '4px' }}>
-            {toolCalls.map((tc, i) => <ToolCallBlock key={i} toolCall={tc} />)}
-          </div>
-        </Section>
-      )}
 
       {/* Tools Definition */}
       {tools.length > 0 && (
