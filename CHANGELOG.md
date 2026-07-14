@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.16 (2026-07-14)
+
+### 修复
+- 兼容 GLM 等模型的 `delta.reasoning` 思考字段（原仅支持 `reasoning_content`）
+
+---
+
 ## v1.3.15 (2026-06-17)
 
 ### 新增
