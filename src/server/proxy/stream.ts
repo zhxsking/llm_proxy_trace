@@ -94,7 +94,9 @@ export async function proxySSEStream(
                 const delta = parsed.choices?.[0]?.delta;
                 if (delta) {
                   if (typeof delta.content === 'string') fullContent += delta.content;
+                  // 兼容不同模型的思考字段名：reasoning_content (DeepSeek/通用) / reasoning (GLM)
                   if (typeof delta.reasoning_content === 'string') reasoningContent += delta.reasoning_content;
+                  else if (typeof delta.reasoning === 'string') reasoningContent += delta.reasoning;
                   if (Array.isArray(delta.tool_calls)) {
                     for (const tc of delta.tool_calls) {
                       const idx = tc.index ?? 0;

@@ -895,7 +895,8 @@ function extractResponseContent(trace: TraceRecord): string | ContentPart[] | nu
     const message = choice.message as Record<string, unknown> | undefined;
     if (message) {
       const content = message.content;
-      const reasoningContent = message.reasoning_content as string | undefined;
+      // 兼容不同模型的思考字段：reasoning_content (DeepSeek/通用) / reasoning (GLM)
+      const reasoningContent = (message.reasoning_content ?? message.reasoning) as string | undefined;
       const parts: ContentPart[] = [];
       if (reasoningContent) parts.push({ type: 'thinking', thinking: reasoningContent });
       if (typeof content === 'string' && content.trim()) {
